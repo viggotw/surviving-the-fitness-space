@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Random } from "./Random";
-import { DEFAULT_PARAMETERS } from "./Parameters";
+import { DEFAULT_PARAMETERS, WORLD_SIZE } from "./Parameters";
 import { createOrganism, updateOrganism, isRemovable, type Organism } from "./Organism";
 
 const alwaysViable = () => true;
@@ -92,6 +92,30 @@ describe("Organism", () => {
     const o = createOrganism(1, 0, 0, undefined, params, rng);
     updateOrganism(o, 0.1, alwaysViable, 0, params, rng, makeIdGen());
     expect(o.state).toBe("alive");
+  });
+
+  it("offspring born outside the world bounds are immediately 'dying'", () => {
+    const rng = new Random(9);
+    const params = {
+      ...DEFAULT_PARAMETERS,
+      burstRadius: 0.2,
+      growthRate: 1,
+      variationRadius: 0.1,
+      offspringCount: 1,
+    };
+    const o = createOrganism(1, WORLD_SIZE + 1, WORLD_SIZE + 1, undefined, params, rng);
+    expect(o.state).toBe("dying");
+
+    const parentAtEdge = createOrganism(2, WORLD_SIZE - 0.01, 0, undefined, params, rng);
+    const offspring = updateOrganism(parentAtEdge, 1, alwaysViable, 0, params, rng, makeIdGen());
+    expect(offspring.length).toBe(1);
+    for (const child of offspring) {
+      if (child.x > WORLD_SIZE || child.x < -WORLD_SIZE || child.y > WORLD_SIZE || child.y < -WORLD_SIZE) {
+        expect(child.state).toBe("dying");
+      } else {
+        expect(child.state).toBe("alive");
+      }
+    }
   });
 
   it("isRemovable becomes true once a dying organism's opacity reaches zero", () => {

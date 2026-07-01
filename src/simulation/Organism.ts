@@ -1,5 +1,5 @@
 import type { Random } from "./Random";
-import type { SimulationParameters } from "./Parameters";
+import { WORLD_SIZE, type SimulationParameters } from "./Parameters";
 
 export type OrganismState = "alive" | "dying" | "bursting";
 
@@ -36,6 +36,10 @@ function wrapHue(hue: number): number {
   return ((hue % 1) + 1) % 1;
 }
 
+function isOutOfBounds(x: number, y: number): boolean {
+  return Math.abs(x) > WORLD_SIZE || Math.abs(y) > WORLD_SIZE;
+}
+
 export function mutate(value: number, mutationAmount: number, rng: Random, min = 0.001): number {
   return Math.max(min, value + rng.gaussian(0, mutationAmount));
 }
@@ -60,7 +64,7 @@ export function createOrganism(
       growthRate: Math.max(0.001, params.growthRate + rng.gaussian(0, params.growthRateVariation)),
       variationRadius: Math.max(0, params.variationRadius),
       hue: rng.next(),
-      state: "alive",
+      state: isOutOfBounds(x, y) ? "dying" : "alive",
     };
   }
 
@@ -75,7 +79,7 @@ export function createOrganism(
     growthRate: mutate(parent.growthRate, params.growthRateMutation, rng),
     variationRadius: mutate(parent.variationRadius, params.variationRadiusMutation, rng, 0),
     hue: wrapHue(parent.hue + rng.gaussian(0, params.hueMutation)),
-    state: "alive",
+    state: isOutOfBounds(x, y) ? "dying" : "alive",
   };
 }
 
