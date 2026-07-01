@@ -5,17 +5,24 @@ import type { SimulationParameters } from "./Parameters";
 export interface ViabilityBlob {
   id: number;
 
+  /** trait-space units */
   x: number;
+  /** trait-space units */
   y: number;
+  /** trait-space units */
   radius: number;
 
+  /** trait-space units/second, before the live `environmentDriftSpeed` multiplier */
   vx: number;
+  /** trait-space units/second, before the live `environmentDriftSpeed` multiplier */
   vy: number;
 
-  /** Fixed per-blob phase offset; combined with `phaseSpeed * time` for deterministic deformation. */
+  /** radians; fixed per-blob phase offset, combined with `phaseSpeed * time` for deterministic deformation */
   phase: number;
+  /** radians/second, before the live `environmentDeformationSpeed` multiplier */
   phaseSpeed: number;
 
+  /** fraction, 0–1; radius-wobble amplitude as a proportion of `radius`, before the live `environmentDeformationStrength` multiplier */
   deformationStrength: number;
 }
 
@@ -36,6 +43,7 @@ export class Landscape {
   private readonly blobs: ViabilityBlob[];
   private readonly bounds: LandscapeBounds;
   private deformSpeed = 1;
+  private deformStrength = 1;
 
   constructor(rng: Random, params: SimulationParameters, bounds: LandscapeBounds) {
     this.bounds = bounds;
@@ -60,8 +68,9 @@ export class Landscape {
   }
 
   /** Drifts blob centers and applies soft containment; deformation itself is a pure function of time. */
-  update(dt: number, driftSpeed: number, deformSpeed: number): void {
+  update(dt: number, driftSpeed: number, deformSpeed: number, deformStrength: number): void {
     this.deformSpeed = deformSpeed;
+    this.deformStrength = deformStrength;
 
     const halfW = this.bounds.width / 2;
     const halfH = this.bounds.height / 2;
@@ -88,7 +97,8 @@ export class Landscape {
 
   private effectiveRadius(blob: ViabilityBlob, time: number): number {
     const phase = blob.phase + blob.phaseSpeed * this.deformSpeed * time;
-    return blob.radius * (1 + blob.deformationStrength * Math.sin(phase));
+    const wobble = blob.deformationStrength * this.deformStrength;
+    return blob.radius * (1 + wobble * Math.sin(phase));
   }
 
   fieldValue(x: number, y: number, time: number): number {

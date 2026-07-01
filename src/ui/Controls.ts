@@ -10,8 +10,7 @@ interface ControlsState {
   variationRadius: number;
   growthRate: number;
   burstRadius: number;
-  offspringMin: number;
-  offspringMax: number;
+  offspringCount: number;
   maxOrganisms: number;
   population: number;
 }
@@ -41,8 +40,7 @@ export class Controls {
       variationRadius: p.variationRadius,
       growthRate: p.growthRate,
       burstRadius: p.burstRadius,
-      offspringMin: p.offspringMin,
-      offspringMax: p.offspringMax,
+      offspringCount: p.offspringCount,
       maxOrganisms: p.maxOrganisms,
       population: simulation.population,
     };
@@ -58,48 +56,45 @@ export class Controls {
     // Environment: governs the moving/deforming viable regions (the "lava-lamp" pattern).
     const environment = this.pane.addFolder({ title: "Environment", expanded: true });
     environment
-      .addBinding(this.state, "environmentDriftSpeed", { label: "Drift speed", min: 0, max: 2, step: 0.01 })
+      .addBinding(this.state, "environmentDriftSpeed", { label: "Drift speed (×)", min: 0, max: 2, step: 0.01 })
       .on("change", (ev) => simulation.setParams({ environmentDriftSpeed: ev.value }));
     environment
-      .addBinding(this.state, "environmentDeformationSpeed", { label: "Deform speed", min: 0, max: 2, step: 0.01 })
+      .addBinding(this.state, "environmentDeformationSpeed", { label: "Deform speed (×)", min: 0, max: 2, step: 0.01 })
       .on("change", (ev) => simulation.setParams({ environmentDeformationSpeed: ev.value }));
     environment
-      .addBinding(this.state, "environmentDeformationStrength", {
-        label: "Deform strength",
-        min: 0,
-        max: 1,
-        step: 0.01,
-      })
+      .addBinding(this.state, "environmentDeformationStrength", { label: "Deform strength (×)", min: 0, max: 3, step: 0.01 })
       .on("change", (ev) => simulation.setParams({ environmentDeformationStrength: ev.value }));
 
     // Organisms: governs individual growth, reproduction, and heritable variation.
     const organisms = this.pane.addFolder({ title: "Organisms", expanded: true });
     organisms
-      .addBinding(this.state, "growthRate", { label: "Growth rate", min: 0.005, max: 1, step: 0.005 })
+      .addBinding(this.state, "growthRate", {
+        label: "Growth rate (units/s)",
+        min: 0.0005,
+        max: 0.03,
+        step: 0.0005,
+      })
       .on("change", (ev) => simulation.setParams({ growthRate: ev.value }));
     organisms
-      .addBinding(this.state, "burstRadius", { label: "Burst radius", min: 0.03, max: 1, step: 0.01 })
+      .addBinding(this.state, "burstRadius", { label: "Burst radius (units)", min: 0.01, max: 0.3, step: 0.005 })
       .on("change", (ev) => simulation.setParams({ burstRadius: ev.value }));
     organisms
-      .addBinding(this.state, "variationRadius", { label: "Variation radius", min: 0, max: 1, step: 0.01 })
+      .addBinding(this.state, "variationRadius", { label: "Variation radius (units)", min: 0, max: 0.6, step: 0.01 })
       .on("change", (ev) => simulation.setParams({ variationRadius: ev.value }));
     organisms
-      .addBinding(this.state, "offspringMin", { label: "Offspring min", min: 1, max: 10, step: 1 })
-      .on("change", (ev) => simulation.setParams({ offspringMin: ev.value }));
-    organisms
-      .addBinding(this.state, "offspringMax", { label: "Offspring max", min: 1, max: 10, step: 1 })
-      .on("change", (ev) => simulation.setParams({ offspringMax: ev.value }));
+      .addBinding(this.state, "offspringCount", { label: "Offspring count (children)", min: 1, max: 10, step: 1 })
+      .on("change", (ev) => simulation.setParams({ offspringCount: ev.value }));
 
     // Population: seeding and overall headcount bookkeeping.
     const population = this.pane.addFolder({ title: "Population", expanded: true });
-    population.addBinding(this.state, "seedCount", { label: "Seed count", min: 1, max: 200, step: 1 });
+    population.addBinding(this.state, "seedCount", { label: "Seed count (organisms)", min: 1, max: 200, step: 1 });
     population.addButton({ title: "Seed population" }).on("click", () => {
       simulation.seedPopulation(this.state.seedCount);
     });
     population
-      .addBinding(this.state, "maxOrganisms", { label: "Max population", min: 10, max: 1000, step: 10 })
+      .addBinding(this.state, "maxOrganisms", { label: "Max population (organisms)", min: 10, max: 1000, step: 10 })
       .on("change", (ev) => simulation.setParams({ maxOrganisms: ev.value }));
-    population.addBinding(this.state, "population", { label: "Population", readonly: true });
+    population.addBinding(this.state, "population", { label: "Population (organisms)", readonly: true });
   }
 
   /** Call once per frame (or on a light throttle) to keep the read-only population monitor live. */

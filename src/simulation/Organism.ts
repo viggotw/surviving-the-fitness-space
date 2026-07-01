@@ -7,17 +7,24 @@ export type Organism = {
   id: number;
   parentId?: number;
 
+  /** trait-space units */
   x: number;
+  /** trait-space units */
   y: number;
 
+  /** seconds since birth */
   age: number;
+  /** trait-space units (radius) */
   radius: number;
+  /** 0–1 */
   opacity: number;
 
+  /** trait-space units of radius per second (heritable, mutated per generation) */
   growthRate: number;
-  burstRadius: number;
+  /** trait-space units (radius); heritable, mutated per generation */
   variationRadius: number;
 
+  /** hue-wheel fraction, 0–1 (heritable, mutated per generation) */
   hue: number;
 
   state: OrganismState;
@@ -51,7 +58,6 @@ export function createOrganism(
       radius: BIRTH_RADIUS,
       opacity: 1,
       growthRate: Math.max(0.001, params.growthRate + rng.gaussian(0, params.growthRateVariation)),
-      burstRadius: Math.max(0.03, params.burstRadius + rng.gaussian(0, params.burstRadiusVariation)),
       variationRadius: Math.max(0, params.variationRadius),
       hue: rng.next(),
       state: "alive",
@@ -67,7 +73,6 @@ export function createOrganism(
     radius: BIRTH_RADIUS,
     opacity: 1,
     growthRate: mutate(parent.growthRate, params.growthRateMutation, rng),
-    burstRadius: mutate(parent.burstRadius, params.burstRadiusMutation, rng, 0.03),
     variationRadius: mutate(parent.variationRadius, params.variationRadiusMutation, rng, 0),
     hue: wrapHue(parent.hue + rng.gaussian(0, params.hueMutation)),
     state: "alive",
@@ -99,10 +104,9 @@ export function updateOrganism(
 
     o.radius += o.growthRate * dt;
 
-    if (o.radius >= o.burstRadius) {
+    if (o.radius >= params.burstRadius) {
       o.state = "bursting";
-      const count = rng.int(params.offspringMin, params.offspringMax);
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < params.offspringCount; i++) {
         const angle = rng.range(0, Math.PI * 2);
         const dist = rng.range(0, o.variationRadius);
         const ox = o.x + Math.cos(angle) * dist;

@@ -33,21 +33,66 @@ export class Simulation {
     if (this.paused) return;
     this._time += dt;
 
-    this.landscape.update(dt, this.params.environmentDriftSpeed, this.params.environmentDeformationSpeed);
+    this.landscape.update(
+      dt,
+      this.params.environmentDriftSpeed,
+      this.params.environmentDeformationSpeed,
+      this.params.environmentDeformationStrength,
+    );
 
     const isViable = (x: number, y: number, t: number) => this.landscape.isViable(x, y, t);
     const offspringBuffer: Organism[] = [];
 
     for (const organism of this.organisms) {
       const offspring = updateOrganism(organism, dt, isViable, this._time, this.params, this.rng, this.nextId);
-      for (const child of offspring) {
-        if (this.organisms.length + offspringBuffer.length >= this.params.maxOrganisms) break;
-        offspringBuffer.push(child);
-      }
+      offspringBuffer.push(...offspring);
     }
 
+    // Every burst always produces its full, predefined offspringCount — the
+    // population cap is enforced afterward by removing the oldest organisms
+    // to make room, rather than silently truncating newly spawned offspring.
+    const newbornIds = new Set(offspringBuffer.map((o) => o.id));
     this.organisms.push(...offspringBuffer);
     this.organisms = this.organisms.filter((o) => !isRemovable(o));
+
+    const excess = this.organisms.length - this.params.maxOrganisms;
+    if (excess > 0) {
+      // Prefer removing the oldest organisms *near where this tick's new
+      // growth happened*, falling back to the globally oldest only if a
+      // local excess can't be found. A purely global oldest-first removal
+      // would otherwise drain every other cluster in favor of whichever
+      // lineage currently reproduces fastest, collapsing the whole
+      // population into a single spot instead of many independent lineages.
+      const localRadius = Math.max(this.params.variationRadius * 4, 1);
+      const isNearNewGrowth = (o: Organism) =>
+        offspringBuffer.some((child) => Math.hypot(o.x - child.x, o.y - child.y) <= localRadius);
+
+      const candidates = this.organisms.filter((o) => !newbornIds.has(o.id));
+      const toRemove = new Set<number>();
+
+      const local = candidates.filter(isNearNewGrowth).sort((a, b) => a.age - b.age);
+      for (const o of local) {
+        if (toRemove.size >= excess) break;
+        toRemove.add(o.id);
+      }
+      if (toRemove.size < excess) {
+        const rest = candidates.filter((o) => !toRemove.has(o.id)).sort((a, b) => a.age - b.age);
+        for (const o of rest) {
+          if (toRemove.size >= excess) break;
+          toRemove.add(o.id);
+        }
+      }
+      // Last resort: if this tick's own new offspring alone outnumber the cap
+      // (e.g. many simultaneous bursts against a very small maxOrganisms),
+      // there is no non-newborn left to remove — the hard cap still wins.
+      if (toRemove.size < excess) {
+        for (const o of this.organisms) {
+          if (toRemove.size >= excess) break;
+          if (!toRemove.has(o.id)) toRemove.add(o.id);
+        }
+      }
+      this.organisms = this.organisms.filter((o) => !toRemove.has(o.id));
+    }
 
     if (this.organisms.length === 0) {
       this.extinctionTimer += dt;

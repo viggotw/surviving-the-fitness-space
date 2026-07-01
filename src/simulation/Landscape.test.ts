@@ -47,7 +47,7 @@ describe("Landscape", () => {
     const landscape = makeLandscape();
     const before = landscape.getBlobs().map((b) => ({ x: b.x, y: b.y }));
     for (let i = 0; i < 60; i++) {
-      landscape.update(1 / 30, 1, 1);
+      landscape.update(1 / 30, 1, 1, 1);
     }
     const after = landscape.getBlobs();
     const moved = after.some((b, i) => b.x !== before[i].x || b.y !== before[i].y);
@@ -57,7 +57,7 @@ describe("Landscape", () => {
   it("blobs remain within bounds after many updates", () => {
     const landscape = makeLandscape();
     for (let i = 0; i < 2000; i++) {
-      landscape.update(1 / 30, 1, 1);
+      landscape.update(1 / 30, 1, 1, 1);
     }
     const halfW = BOUNDS.width / 2;
     const halfH = BOUNDS.height / 2;
@@ -79,12 +79,28 @@ describe("Landscape", () => {
     expect(allEqual).toBe(false);
   });
 
+  it("environmentDeformationStrength scales the wobble amplitude live", () => {
+    const landscape = makeLandscape();
+    const blob = landscape.getBlobs()[0];
+    const probeX = blob.x + blob.radius * 0.9;
+    const probeY = blob.y;
+    const t = 1.3; // arbitrary, non-zero-crossing point in the wobble cycle
+
+    landscape.update(0, 1, 1, 0);
+    const withNoWobble = landscape.fieldValue(probeX, probeY, t);
+
+    landscape.update(0, 1, 1, 3);
+    const withExaggeratedWobble = landscape.fieldValue(probeX, probeY, t);
+
+    expect(withExaggeratedWobble).not.toBe(withNoWobble);
+  });
+
   it("is deterministic for a given seed", () => {
     const a = makeLandscape(99);
     const b = makeLandscape(99);
     for (let i = 0; i < 30; i++) {
-      a.update(1 / 30, 1, 1);
-      b.update(1 / 30, 1, 1);
+      a.update(1 / 30, 1, 1, 1);
+      b.update(1 / 30, 1, 1, 1);
     }
     expect(a.getBlobs()).toEqual(b.getBlobs());
   });

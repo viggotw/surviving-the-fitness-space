@@ -33,16 +33,35 @@ describe("Simulation", () => {
       initialOrganisms: 0,
       maxOrganisms: 5,
       burstRadius: 0.1,
-      burstRadiusVariation: 0,
-      burstRadiusMutation: 0,
       growthRate: 20,
       growthRateVariation: 0,
-      offspringMin: 4,
-      offspringMax: 4,
+      offspringCount: 4,
     });
     sim.seedPopulation(3);
     sim.update(1); // all three should burst simultaneously and try to spawn 12 offspring
     expect(sim.population).toBeLessThanOrEqual(5);
+  });
+
+  it("removes the oldest organisms to make room rather than truncating a burst's offspring", () => {
+    const sim = new Simulation({
+      seed: 3,
+      initialOrganisms: 0,
+      maxOrganisms: 4,
+      burstRadius: 0.1,
+      growthRate: 20,
+      growthRateVariation: 0,
+      offspringCount: 4,
+    });
+    sim.seedPopulation(1); // a single parent, about to burst
+    sim.update(1); // parent bursts, requesting its full brood of 4 offspring
+
+    // the cap (4) is hit only because the aging parent is displaced, not because
+    // any of the newly spawned offspring were dropped
+    expect(sim.population).toBe(4);
+    for (const o of sim.getOrganisms()) {
+      expect(o.parentId).toBeDefined();
+      expect(o.state).toBe("alive");
+    }
   });
 
   it("is reproducible for a given seed and dt sequence", () => {

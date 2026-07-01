@@ -2,56 +2,70 @@
 export const WORLD_SIZE = 5;
 
 export interface SimulationParameters {
+  /** organisms */
   initialOrganisms: number;
+  /** organisms */
   maxOrganisms: number;
 
+  /** trait-space units of radius per second */
   growthRate: number;
+  /** trait-space units/second (stddev applied once, to the initial population) */
   growthRateVariation: number;
+  /** trait-space units/second (stddev applied per generation, parent → offspring) */
   growthRateMutation: number;
 
+  /** trait-space units (radius); predefined size every organism grows to before bursting — controlled live via the panel */
   burstRadius: number;
-  burstRadiusVariation: number;
-  burstRadiusMutation: number;
 
-  offspringMin: number;
-  offspringMax: number;
+  /** children per burst; predefined, exact count produced on every burst — controlled live via the panel */
+  offspringCount: number;
 
+  /** trait-space units (radius); max distance offspring spawn from their parent */
   variationRadius: number;
+  /** trait-space units (stddev applied per generation, parent → offspring) */
   variationRadiusMutation: number;
 
+  /** hue-wheel fraction, 0–1 (stddev applied per generation, parent → offspring) */
   hueMutation: number;
 
+  /** unitless multiplier on each viability blob's base drift speed */
   environmentDriftSpeed: number;
+  /** unitless multiplier on each viability blob's base radius-deformation rate */
   environmentDeformationSpeed: number;
+  /** unitless multiplier on each viability blob's base radius-wobble amplitude */
   environmentDeformationStrength: number;
 
+  /** blobs */
   viabilityBlobCount: number;
+  /** trait-space units (radius) */
   viabilityBlobRadiusMin: number;
+  /** trait-space units (radius) */
   viabilityBlobRadiusMax: number;
 
+  /** seconds */
   deathFadeDuration: number;
+  /** seconds */
   burstEffectDuration: number;
 
   autoReseedOnExtinction: boolean;
+  /** seconds */
   extinctionReseedDelay: number;
 
+  /** PRNG seed; no unit */
   seed: number | string;
 }
 
 export const DEFAULT_PARAMETERS: SimulationParameters = {
   initialOrganisms: 40,
-  maxOrganisms: 400,
+  maxOrganisms: 600,
 
-  growthRate: 0.05,
-  growthRateVariation: 0.02,
-  growthRateMutation: 0.008,
+  growthRate: 0.005,
+  growthRateVariation: 0.002,
+  growthRateMutation: 0.0008,
 
-  burstRadius: 0.15,
-  burstRadiusVariation: 0.025,
-  burstRadiusMutation: 0.012,
+  burstRadius: 0.05,
 
-  offspringMin: 2,
-  offspringMax: 3,
+  offspringCount: 3,
 
   variationRadius: 0.22,
   variationRadiusMutation: 0.02,
@@ -81,8 +95,7 @@ export function clampParameters(p: Partial<SimulationParameters>): Partial<Simul
   if (clamped.maxOrganisms !== undefined) clamped.maxOrganisms = Math.max(1, Math.floor(clamped.maxOrganisms));
   if (clamped.growthRate !== undefined) clamped.growthRate = Math.max(0.001, clamped.growthRate);
   if (clamped.burstRadius !== undefined) clamped.burstRadius = Math.max(0.01, clamped.burstRadius);
-  if (clamped.offspringMin !== undefined) clamped.offspringMin = Math.max(1, Math.floor(clamped.offspringMin));
-  if (clamped.offspringMax !== undefined) clamped.offspringMax = Math.max(1, Math.floor(clamped.offspringMax));
+  if (clamped.offspringCount !== undefined) clamped.offspringCount = Math.max(1, Math.floor(clamped.offspringCount));
   if (clamped.variationRadius !== undefined) clamped.variationRadius = Math.max(0, clamped.variationRadius);
   if (clamped.viabilityBlobCount !== undefined) clamped.viabilityBlobCount = Math.max(1, Math.floor(clamped.viabilityBlobCount));
   return clamped;

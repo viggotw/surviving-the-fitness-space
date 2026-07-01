@@ -32,13 +32,12 @@ describe("Organism", () => {
     expect(o.state).toBe("bursting");
   });
 
-  it("spawns offspring within variationRadius of the parent on burst", () => {
+  it("spawns exactly offspringCount children within variationRadius of the parent on burst", () => {
     const rng = new Random(3);
-    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1, variationRadius: 0.4 };
+    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1, variationRadius: 0.4, offspringCount: 5 };
     const o = createOrganism(1, 0.5, -0.5, undefined, params, rng);
     const offspring = updateOrganism(o, 1, alwaysViable, 0, params, rng, makeIdGen());
-    expect(offspring.length).toBeGreaterThanOrEqual(params.offspringMin);
-    expect(offspring.length).toBeLessThanOrEqual(params.offspringMax);
+    expect(offspring.length).toBe(params.offspringCount);
     for (const child of offspring) {
       const dist = Math.hypot(child.x - o.x, child.y - o.y);
       expect(dist).toBeLessThanOrEqual(o.variationRadius + 1e-9);
@@ -55,14 +54,29 @@ describe("Organism", () => {
     const child = offspring[0];
     const traitsDiffer =
       child.growthRate !== o.growthRate ||
-      child.burstRadius !== o.burstRadius ||
       child.variationRadius !== o.variationRadius ||
       child.hue !== o.hue;
     expect(traitsDiffer).toBe(true);
 
     // mutation should be bounded (not wildly divergent) for reasonable mutation amounts
     expect(Math.abs(child.growthRate - o.growthRate)).toBeLessThan(1);
-    expect(Math.abs(child.burstRadius - o.burstRadius)).toBeLessThan(1);
+  });
+
+  it("bursts at exactly the predefined burstRadius, not a per-organism value", () => {
+    const rng = new Random(8);
+    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1 };
+    const a = createOrganism(1, 0, 0, undefined, params, rng);
+    const b = createOrganism(2, 0, 0, a, params, rng);
+    updateOrganism(a, 1, alwaysViable, 0, params, rng, makeIdGen());
+    updateOrganism(b, 1, alwaysViable, 0, params, rng, makeIdGen());
+    expect(a.state).toBe("bursting");
+    expect(b.state).toBe("bursting");
+
+    // Lowering the live parameter mid-run immediately changes the threshold for everyone.
+    const lowered = { ...params, burstRadius: 0.01 };
+    const c = createOrganism(3, 0, 0, undefined, lowered, rng);
+    updateOrganism(c, 0.02, alwaysViable, 0, lowered, rng, makeIdGen());
+    expect(c.state).toBe("bursting");
   });
 
   it("becomes 'dying' when it leaves the viable region", () => {
