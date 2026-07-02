@@ -17,6 +17,12 @@ npm test          # run the simulation unit tests
 npm run build     # production build
 ```
 
+## Interacting with the scene
+
+Click anywhere in the scene to spawn a single organism there. It follows the exact same rules as
+every other organism: if the click lands in a viable region it starts growing; otherwise it falls
+away, whether that's a non-viable spot within the fitness space or outside it entirely.
+
 ## Controls panel
 
 Every slider's range is centered on its default — the lever sits in the middle of the track

@@ -15,6 +15,8 @@ export class Renderer3D {
   private readonly camera: THREE.OrthographicCamera;
   private readonly fitnessPlane: FitnessPlane;
   private readonly organismView: OrganismView;
+  private readonly raycaster = new THREE.Raycaster();
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   constructor(canvas: HTMLCanvasElement, maxOrganisms: number) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -48,6 +50,24 @@ export class Renderer3D {
     this.scene.add(this.organismView.mesh);
 
     this.resize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
+  }
+
+  /**
+   * Converts a click in normalized device coordinates (each in [-1, 1]) to a
+   * trait-space (x, y) point, by casting the isometric camera's ray onto the
+   * infinite ground plane (y = 0) — not just the finite fitness-plane mesh,
+   * so a click anywhere on screen resolves to *some* trait-space point, even
+   * one far outside WORLD_SIZE. Returns null only in the degenerate case
+   * where the ray is parallel to the ground (never happens for this fixed,
+   * downward-looking camera, but Three.js's API can return null).
+   */
+  raycastToTraitSpace(ndcX: number, ndcY: number): { x: number; y: number } | null {
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const point = new THREE.Vector3();
+    const hit = this.raycaster.ray.intersectPlane(this.groundPlane, point);
+    if (!hit) return null;
+    // Trait-space (x, y) maps to world (x, -y); see FitnessPlane/OrganismView.
+    return { x: point.x, y: -point.z };
   }
 
   resize(width: number, height: number): void {

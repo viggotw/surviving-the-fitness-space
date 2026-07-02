@@ -89,7 +89,10 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     lineages tracking the landscape — keep this local-first behavior if touching this logic.
     `Simulation`'s public surface
     (`getOrganisms()`, `getLandscape()`, `params`, `update()`, `setParams()`, `seedPopulation()`,
-    `reset()`, `paused`) is the only thing rendering/UI code may touch.
+    `spawnOrganismAt(x, y)`, `reset()`, `paused`) is the only thing rendering/UI code may touch.
+    `spawnOrganismAt` is `seedPopulation`'s single-point counterpart (e.g. for click-to-spawn): it
+    always honors the request, displacing the oldest organism to make room at the population cap
+    rather than silently no-oping.
 
 - `src/rendering/` — Three.js. Reads simulation state every frame via `Renderer3D.sync(simulation)`
   but never advances simulation time itself.
@@ -105,7 +108,10 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   - `Effects.ts` — pure functions computing display scale/opacity from an `Organism`'s state; no
     Three.js or Simulation coupling.
   - `Renderer3D.ts` — owns the scene graph, composes the above, and is the only class that imports
-    both `three` and `Simulation`'s type.
+    both `three` and `Simulation`'s type. `raycastToTraitSpace(ndcX, ndcY)` casts the fixed
+    isometric camera's ray onto the infinite ground plane (not the finite fitness-plane mesh, so a
+    click resolves to a trait-space point even far outside `WORLD_SIZE`) — the only Three.js-facing
+    API `main.ts` needs for click-to-spawn.
 
 - `src/ui/` — `Controls.ts` is a Tweakpane dev panel grouped into folders (Environment / Organisms
   / Population) so it's clear what governs the drifting viable regions vs. individual organism
@@ -115,7 +121,12 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
 
 - `src/app/main.ts` — the only place the per-frame loop is wired:
   `simulation.update(dt) → renderer.sync(simulation) → renderer.render()`, with `dt` clamped to
-  `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus.
+  `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus. Also wires the
+  click-to-spawn interaction: a click on `#scene` is converted to NDC, raycast to a trait-space
+  point via `Renderer3D.raycastToTraitSpace`, then handed to `Simulation.spawnOrganismAt(x, y)` —
+  no special-casing for out-of-bounds/non-viable clicks, since `spawnOrganismAt` is just
+  `createOrganism` + `push`, so the same lifecycle rules that make any other out-of-bounds/
+  non-viable organism fall away apply automatically.
 
 ## Known workarounds
 

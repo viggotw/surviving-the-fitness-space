@@ -134,6 +134,26 @@ export class Simulation {
     }
   }
 
+  /**
+   * Spawns a single root organism at an arbitrary point (e.g. a user click).
+   * Reuses the same creation/lifecycle rules as everything else: if `(x, y)`
+   * is outside the world bounds or a non-viable region, it becomes `dying`
+   * immediately or on its first tick and falls away, exactly like any other
+   * organism would. Always honors the request rather than silently no-oping
+   * at the population cap — displaces the oldest organism to make room, same
+   * as a burst would.
+   */
+  spawnOrganismAt(x: number, y: number): void {
+    if (this.organisms.length >= this.params.maxOrganisms) {
+      let oldest = this.organisms[0];
+      for (const o of this.organisms) {
+        if (o.age > oldest.age) oldest = o;
+      }
+      this.organisms = this.organisms.filter((o) => o !== oldest);
+    }
+    this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.rng));
+  }
+
   setParams(partial: Partial<SimulationParameters>): void {
     Object.assign(this.params, clampParameters(partial));
   }

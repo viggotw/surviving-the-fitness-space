@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Simulation } from "./Simulation";
+import { WORLD_SIZE } from "./Parameters";
 
 describe("Simulation", () => {
   it("detects extinction when population reaches zero", () => {
@@ -60,6 +61,45 @@ describe("Simulation", () => {
       expect(o.parentId).toBeDefined();
       expect(o.state).toBe("alive");
     }
+  });
+
+  it("spawnOrganismAt adds a growing organism inside a viable region", () => {
+    const sim = new Simulation({ seed: 4, initialOrganisms: 0 });
+    const blob = sim.getLandscape().getBlobs()[0];
+    sim.spawnOrganismAt(blob.x, blob.y); // dead center of a blob is always viable
+    expect(sim.population).toBe(1);
+
+    const before = sim.getOrganisms()[0].radius;
+    sim.update(1);
+    expect(sim.population).toBe(1);
+    expect(sim.getOrganisms()[0].state).toBe("alive");
+    expect(sim.getOrganisms()[0].radius).toBeGreaterThan(before);
+  });
+
+  it("spawnOrganismAt in a non-viable spot falls away instead of growing", () => {
+    const sim = new Simulation({ seed: 5, initialOrganisms: 0 });
+    sim.spawnOrganismAt(1000, 1000); // far outside every blob
+    expect(sim.population).toBe(1);
+    sim.update(0.1);
+    expect(sim.getOrganisms()[0].state).toBe("dying");
+  });
+
+  it("spawnOrganismAt outside world bounds is immediately dying, same as any other out-of-bounds spawn", () => {
+    const sim = new Simulation({ seed: 6, initialOrganisms: 0 });
+    sim.spawnOrganismAt(WORLD_SIZE + 5, 0);
+    expect(sim.getOrganisms()[0].state).toBe("dying");
+  });
+
+  it("spawnOrganismAt displaces the oldest organism instead of exceeding maxOrganisms", () => {
+    const sim = new Simulation({ seed: 7, initialOrganisms: 0, maxOrganisms: 3 });
+    sim.seedPopulation(3);
+    expect(sim.population).toBe(3);
+    const survivingIds = sim.getOrganisms().slice(1).map((o) => o.id);
+
+    sim.spawnOrganismAt(0, 0);
+    expect(sim.population).toBe(3);
+    const ids = sim.getOrganisms().map((o) => o.id);
+    for (const id of survivingIds) expect(ids).toContain(id);
   });
 
   it("is reproducible for a given seed and dt sequence", () => {

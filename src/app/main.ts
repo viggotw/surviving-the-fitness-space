@@ -43,3 +43,15 @@ requestAnimationFrame(frame);
 window.addEventListener("resize", () => {
   renderer.resize(window.innerWidth, window.innerHeight);
 });
+
+// Click anywhere on the scene to spawn a single organism there. If the
+// click lands outside the viable region (or outside the world entirely),
+// it just falls away like any other organism would — spawnOrganismAt
+// reuses the exact same creation/lifecycle rules, no special-casing needed.
+canvas.addEventListener("click", (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  const point = renderer.raycastToTraitSpace(ndcX, ndcY);
+  if (point) simulation.spawnOrganismAt(point.x, point.y);
+});
