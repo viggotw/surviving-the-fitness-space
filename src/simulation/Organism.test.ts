@@ -38,7 +38,14 @@ describe("Organism", () => {
 
   it("spawns exactly offspringCount children within variationRadius of the parent on burst", () => {
     const rng = new Random(3);
-    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1, variationRadius: 0.4, offspringCount: 5 };
+    const params = {
+      ...DEFAULT_PARAMETERS,
+      burstRadius: 0.2,
+      growthRate: 1,
+      variationRadius: 0.4,
+      offspringCount: 5,
+      spawnClearanceFactor: 0, // clearance rejection is covered separately below
+    };
     const o = createOrganism(1, 0.5, -0.5, undefined, params, BOUNDS, rng);
     const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(offspring.length).toBe(params.offspringCount);
@@ -213,6 +220,46 @@ describe("Organism", () => {
     updateOrganism(o, 1, alwaysViable, () => 0, 0, params, BOUNDS, rng, makeIdGen());
     expect(o.radius).toBe(before);
     expect(o.state).toBe("alive"); // isViable (not fitness) governs alive/dying
+  });
+
+  it("skips a child instead of placing it overlapping when there's no room within variationRadius", () => {
+    const rng = new Random(22);
+    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1, variationRadius: 0.1, offspringCount: 3 };
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    // A neighbor sitting exactly at the parent's own position — with
+    // variationRadius (0.1) smaller than the required clearance (2 * 0.2 =
+    // 0.4), every possible candidate spot is within clearance range of it.
+    const neighbor = { x: 0, y: 0 };
+    const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen(), [neighbor]);
+    expect(offspring.length).toBe(0);
+  });
+
+  it("spawnClearanceFactor 0 disables the check, always placing every child", () => {
+    const rng = new Random(22);
+    const params = {
+      ...DEFAULT_PARAMETERS,
+      burstRadius: 0.2,
+      growthRate: 1,
+      variationRadius: 0.1,
+      offspringCount: 3,
+      spawnClearanceFactor: 0,
+    };
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const neighbor = { x: 0, y: 0 };
+    const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen(), [neighbor]);
+    expect(offspring.length).toBe(3);
+  });
+
+  it("a placed child keeps at least spawnClearanceFactor * burstRadius from every neighbor", () => {
+    const rng = new Random(23);
+    const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.1, growthRate: 1, variationRadius: 1, offspringCount: 1 };
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const neighbor = { x: 0.05, y: 0 };
+    const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen(), [neighbor]);
+    expect(offspring.length).toBe(1);
+    const minDist = params.spawnClearanceFactor * params.burstRadius;
+    const dist = Math.hypot(offspring[0].x - neighbor.x, offspring[0].y - neighbor.y);
+    expect(dist).toBeGreaterThanOrEqual(minDist - 1e-9);
   });
 
   it("isRemovable becomes true once a dying organism's opacity reaches zero", () => {

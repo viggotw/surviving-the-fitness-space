@@ -52,8 +52,27 @@ export interface SimulationParameters {
    */
   growthStartDelayMax: number;
 
-  /** children per burst; predefined, exact count produced on every burst — controlled live via the panel */
+  /**
+   * children per burst; the *target* count produced on every burst —
+   * controlled live via the panel. With `spawnClearanceFactor` above 0 this
+   * is no longer a guarantee: a candidate spot that can't clear every
+   * existing organism by `spawnClearanceFactor * burstRadius` is simply
+   * skipped rather than placed overlapping, so a burst can yield fewer than
+   * `offspringCount` children in a crowded spot ("not enough room").
+   */
   offspringCount: number;
+
+  /**
+   * unitless multiplier on `burstRadius`; minimum center-to-center distance
+   * (`spawnClearanceFactor * burstRadius`) a candidate offspring position
+   * must keep from every existing organism to be accepted — see
+   * `offspringCount` above. 2 guarantees two fully-grown organisms can never
+   * overlap even at their final size (their radii, summing to `2 *
+   * burstRadius`, exactly touch at that distance); lower values tolerate
+   * some eventual overlap in exchange for fewer skipped spawns. 0 disables
+   * the check entirely (the original always-place behavior).
+   */
+  spawnClearanceFactor: number;
 
   /** trait-space units (radius); max distance offspring spawn from their parent */
   variationRadius: number;
@@ -112,6 +131,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   growthStartDelayMax: 0.5,
 
   offspringCount: 3,
+  spawnClearanceFactor: 2,
 
   variationRadius: 0.5,
   variationRadiusMutation: 0.02,
@@ -145,6 +165,7 @@ export function clampParameters(p: Partial<SimulationParameters>): Partial<Simul
   if (clamped.burstRadius !== undefined) clamped.burstRadius = Math.max(MIN_BURST_RADIUS, clamped.burstRadius);
   if (clamped.growthStartDelayMax !== undefined) clamped.growthStartDelayMax = Math.max(0, clamped.growthStartDelayMax);
   if (clamped.offspringCount !== undefined) clamped.offspringCount = Math.max(1, Math.floor(clamped.offspringCount));
+  if (clamped.spawnClearanceFactor !== undefined) clamped.spawnClearanceFactor = Math.max(0, clamped.spawnClearanceFactor);
   if (clamped.variationRadius !== undefined) clamped.variationRadius = Math.max(0, clamped.variationRadius);
   if (clamped.edgeFadeWidth !== undefined) clamped.edgeFadeWidth = Math.max(0, clamped.edgeFadeWidth);
   if (clamped.viabilityBlobCount !== undefined) clamped.viabilityBlobCount = Math.max(1, Math.floor(clamped.viabilityBlobCount));

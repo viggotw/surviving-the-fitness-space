@@ -8,6 +8,10 @@ when the drifting "viable region" beneath them moves away. There's no goal, no o
 synchronized generational update — only reproduction, heritable variation, environmental drift,
 and filtering.
 
+Each organism's color comes from a heritable hue, assigned randomly when a lineage begins and
+passed to offspring with a small mutation each generation, so color tracks family lineage rather
+than health, fitness, or age.
+
 ## Running it
 
 ```
@@ -35,20 +39,23 @@ out of the box, left of center is slower/smaller, right of center is faster/bigg
 | Drift speed | multiplier on how fast regions move |
 | Deform speed | multiplier on how fast regions pulse/deform, and on how fast regions themselves form and dissolve |
 | Deform strength | multiplier on how much regions pulse/deform |
+| Edge fading | width of the interior band, near a region's edge, over which the floor dims and organism growth throttles toward zero; 0 (default) is a hard binary edge with no interior throttling |
 
 **Organisms** — governs individual growth and reproduction. Sizes are shown as a percentage of
 the fitness space's half-width, not raw trait-space units, so they read as "how big relative to
-the play area" instead of tiny decimals. Growth rate and burst radius are shared and
-deterministic — every organism grows at the exact same rate to the exact same size before
-bursting, not a per-organism trait:
+the play area" instead of tiny decimals. Growth rate, birth radius, and burst radius are shared
+and deterministic — every organism starts at the exact same size and grows at the exact same rate
+to the exact same size before bursting, not a per-organism trait:
 
 | Control | Unit |
 |---|---|
 | Growth rate | % of the fitness space's half-width, per second |
+| Birth radius | % of the fitness space's half-width; every organism's starting size at spawn |
 | Burst radius | % of the fitness space's half-width; the predefined size every organism grows to before bursting |
 | Spawn delay, max | seconds; each organism waits a random delay in `[0, this]` after spawning before it starts growing — the only source of randomness in growth timing, kept small enough to just break lockstep between same-tick cohorts without visibly staggering growth |
 | Variation radius | % of the fitness space's half-width; max distance offspring spawn from their parent |
-| Offspring count | exact number of children produced on every burst |
+| Offspring count | target number of children produced on every burst — see Spawn clearance below for when fewer are actually placed |
+| Spawn clearance | multiplier on burst radius; minimum center-to-center distance a new child must keep from every existing organism. 2 (default) guarantees two fully-grown organisms can never overlap; a child with no clear spot after several tries is skipped rather than placed overlapping. 0 disables the check |
 
 **Population** — seeding and headcount bookkeeping:
 

@@ -73,12 +73,24 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     keeps drift from settling into a repeating back-and-forth bounce.
   - `Organism.ts` — the `Organism` type and its asynchronous per-organism lifecycle
     (`alive → dying` on leaving a viable region, `alive → bursting → removed` on reaching the
-    live `params.burstRadius`, spawning exactly `params.offspringCount` mutated offspring).
+    live `params.burstRadius`, spawning up to `params.offspringCount` mutated offspring).
     `updateOrganism()` mutates the organism in place and *returns* any newly spawned offspring; it
-    never appends to a population itself.
+    never appends to a population itself. Each candidate offspring position is rejection-sampled
+    (up to `MAX_SPAWN_ATTEMPTS` tries) within `variationRadius` of the parent, requiring at least
+    `spawnClearanceFactor * burstRadius` center-to-center distance from every existing organism
+    (`neighbors`, passed in by the caller) *and* from this burst's own siblings placed so far — at
+    the default factor of 2 this guarantees two fully-grown organisms can never overlap, for
+    either one's entire lifetime, not just at the moment of spawning. A child with no clear spot
+    after all attempts is simply skipped ("not enough room") rather than placed overlapping, so
+    `offspringCount` is a target per burst, not a guarantee, whenever `spawnClearanceFactor > 0`.
+    0 disables the check entirely, restoring the original always-place behavior.
   - `Simulation.ts` — owns the organism array and the `Landscape`, steps everything by `dt`,
-    and is the *only* place that enforces the population hard-cap and extinction/auto-reseed.
-    Every burst always produces its full `offspringCount` brood; the cap is enforced *after*
+    and is the *only* place that enforces the population hard-cap and extinction/auto-reseed. It
+    passes its own current `organisms` array into `updateOrganism` as the spawn-clearance
+    `neighbors` set (so bursts only avoid overlapping organisms that existed *before* this tick —
+    two different parents bursting into the same space within one tick can still collide; accepted
+    as a rare, low-cost edge case rather than threading a live cross-burst buffer through the loop).
+    The cap is enforced *after*
     appending offspring by removing the oldest organisms until the population is back at
     `maxOrganisms`, rather than truncating newly spawned offspring. Removal prefers the oldest
     organisms *near this tick's new growth* first, falling back to the globally oldest only if a

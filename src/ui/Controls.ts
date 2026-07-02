@@ -41,6 +41,7 @@ interface ControlsState {
   burstRadius: number;
   growthStartDelayMax: number;
   offspringCount: number;
+  spawnClearanceFactor: number;
   maxOrganisms: number;
   population: number;
   autoReseedOnExtinction: boolean;
@@ -75,6 +76,7 @@ export class Controls {
       burstRadius: toDisplaySize(p.burstRadius),
       growthStartDelayMax: p.growthStartDelayMax,
       offspringCount: p.offspringCount,
+      spawnClearanceFactor: p.spawnClearanceFactor,
       maxOrganisms: p.maxOrganisms,
       population: simulation.population,
       autoReseedOnExtinction: p.autoReseedOnExtinction,
@@ -180,6 +182,17 @@ export class Controls {
         step: 1,
       })
       .on("change", (ev) => simulation.setParams({ offspringCount: ev.value }));
+    organisms
+      // 2 guarantees no two fully-grown organisms can ever overlap; lower
+      // values relax that (more spawns succeed, more eventual overlap is
+      // tolerated); 0 disables the check entirely (always places the child).
+      .addBinding(this.state, "spawnClearanceFactor", {
+        label: "Spawn clearance (×)",
+        min: 0,
+        max: 2,
+        step: 0.05,
+      })
+      .on("change", (ev) => simulation.setParams({ spawnClearanceFactor: ev.value }));
 
     // Population: seeding and overall headcount bookkeeping.
     const population = this.pane.addFolder({ title: "Population", expanded: true });

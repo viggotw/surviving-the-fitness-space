@@ -56,6 +56,7 @@ export class Simulation {
         this.bounds,
         this.rng,
         this.nextId,
+        this.organisms,
       );
       offspringBuffer.push(...offspring);
     }
