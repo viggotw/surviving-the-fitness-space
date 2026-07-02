@@ -57,7 +57,7 @@ export class Controls {
 
   constructor(container: HTMLElement, simulation: Simulation, onReset: () => void) {
     this.simulation = simulation;
-    this.pane = new Pane({ container, title: "Controls" });
+    this.pane = new Pane({ container, title: "Controls", expanded: false });
     const p = simulation.params;
 
     this.state = {
