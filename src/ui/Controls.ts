@@ -13,6 +13,7 @@ interface ControlsState {
   offspringCount: number;
   maxOrganisms: number;
   population: number;
+  autoReseedOnExtinction: boolean;
 }
 
 /**
@@ -43,6 +44,7 @@ export class Controls {
       offspringCount: p.offspringCount,
       maxOrganisms: p.maxOrganisms,
       population: simulation.population,
+      autoReseedOnExtinction: p.autoReseedOnExtinction,
     };
 
     // Global transport controls.
@@ -56,13 +58,17 @@ export class Controls {
     // Environment: governs the moving/deforming viable regions (the "lava-lamp" pattern).
     const environment = this.pane.addFolder({ title: "Environment", expanded: true });
     environment
-      .addBinding(this.state, "environmentDriftSpeed", { label: "Drift speed (×)", min: 0, max: 2, step: 0.01 })
+      .addBinding(this.state, "environmentDriftSpeed", { label: "Drift speed (×)", min: 0, max: 1, step: 0.005 })
       .on("change", (ev) => simulation.setParams({ environmentDriftSpeed: ev.value }));
     environment
-      .addBinding(this.state, "environmentDeformationSpeed", { label: "Deform speed (×)", min: 0, max: 2, step: 0.01 })
+      .addBinding(this.state, "environmentDeformationSpeed", { label: "Deform speed (×)", min: 0, max: 1, step: 0.005 })
       .on("change", (ev) => simulation.setParams({ environmentDeformationSpeed: ev.value }));
     environment
-      .addBinding(this.state, "environmentDeformationStrength", { label: "Deform strength (×)", min: 0, max: 3, step: 0.01 })
+      // Capped at 2, not higher: each blob's own wobble amplitude tops out
+      // at 0.35, so above ~2.86× here `1 + wobble * wave` can cross zero and
+      // the effective radius flips sign — capping at 2 keeps it always
+      // positive so the slider can't produce that glitch.
+      .addBinding(this.state, "environmentDeformationStrength", { label: "Deform strength (×)", min: 0, max: 2, step: 0.01 })
       .on("change", (ev) => simulation.setParams({ environmentDeformationStrength: ev.value }));
 
     // Organisms: governs individual growth, reproduction, and heritable variation.
@@ -94,7 +100,16 @@ export class Controls {
     population
       .addBinding(this.state, "maxOrganisms", { label: "Max population (organisms)", min: 10, max: 1000, step: 10 })
       .on("change", (ev) => simulation.setParams({ maxOrganisms: ev.value }));
-    population.addBinding(this.state, "population", { label: "Population (organisms)", readonly: true });
+    population.addBinding(this.state, "population", {
+      label: "Population (organisms)",
+      readonly: true,
+      // Organism count is a whole number — the default monitor format shows
+      // 2 decimal places, which falsely implies fractional precision.
+      format: (v: number) => v.toFixed(0),
+    });
+    population
+      .addBinding(this.state, "autoReseedOnExtinction", { label: "Auto-reseed on extinction" })
+      .on("change", (ev) => simulation.setParams({ autoReseedOnExtinction: ev.value }));
   }
 
   /** Call once per frame (or on a light throttle) to keep the read-only population monitor live. */

@@ -26,7 +26,9 @@ const MAX_DT = 1 / 20;
 let last = performance.now();
 
 function frame(now: number): void {
-  const dt = Math.min((now - last) / 1000, MAX_DT);
+  // Also floor at 0: the very first rAF timestamp can occasionally predate
+  // the `performance.now()` captured just above, producing a negative dt.
+  const dt = Math.max(0, Math.min((now - last) / 1000, MAX_DT));
   last = now;
 
   simulation.update(dt);

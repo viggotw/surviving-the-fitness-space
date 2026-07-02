@@ -1,15 +1,15 @@
 import * as THREE from "three";
 import type { Organism } from "../simulation/Organism";
-import { displayOpacity, displayScale } from "./Effects";
+import { displayFallOffset, displayOpacity, displayScale } from "./Effects";
 
-const RESTING_HEIGHT = 0.02;
+const RESTING_HEIGHT = 0.0;
 
 /**
  * Renders the whole population as a single InstancedMesh (spec 10.2) so
  * organism count can scale into the hundreds without per-object overhead.
- * Per-instance fade is approximated by scaling toward zero and darkening the
- * instance color; true per-instance alpha would need a custom shader
- * (deferred).
+ * Dying organisms fall straight down out of view rather than fading in
+ * place; instance color is still darkened toward death as a secondary cue
+ * (true per-instance alpha would need a custom shader, deferred).
  */
 export class OrganismView {
   readonly mesh: THREE.InstancedMesh;
@@ -43,9 +43,10 @@ export class OrganismView {
     for (let i = 0; i < count; i++) {
       const o = organisms[i];
       const scale = displayScale(o);
+      const fallOffset = displayFallOffset(o);
 
       // Trait-space (x, y) maps to world (x, -y) on the horizontal plane; see FitnessPlane.
-      this.dummy.position.set(o.x, scale + RESTING_HEIGHT, -o.y);
+      this.dummy.position.set(o.x, scale + RESTING_HEIGHT + fallOffset, -o.y);
       this.dummy.scale.setScalar(scale);
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(i, this.dummy.matrix);

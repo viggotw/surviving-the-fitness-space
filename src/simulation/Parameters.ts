@@ -28,9 +28,9 @@ export interface SimulationParameters {
   /** hue-wheel fraction, 0–1 (stddev applied per generation, parent → offspring) */
   hueMutation: number;
 
-  /** unitless multiplier on each viability blob's base drift speed */
+  /** unitless multiplier on each viability blob's base drift (random-walk heading) speed */
   environmentDriftSpeed: number;
-  /** unitless multiplier on each viability blob's base radius-deformation rate */
+  /** unitless multiplier on each viability blob's base radius-wobble rate *and* its birth/grow/shrink/death lifecycle pacing */
   environmentDeformationSpeed: number;
   /** unitless multiplier on each viability blob's base radius-wobble amplitude */
   environmentDeformationStrength: number;
@@ -72,8 +72,8 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
 
   hueMutation: 0.03,
 
-  environmentDriftSpeed: 0.15,
-  environmentDeformationSpeed: 0.2,
+  environmentDriftSpeed: 0.3,
+  environmentDeformationSpeed: 0.08,
   environmentDeformationStrength: 0.3,
 
   viabilityBlobCount: 5,
@@ -83,7 +83,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   deathFadeDuration: 0.8,
   burstEffectDuration: 0.4,
 
-  autoReseedOnExtinction: true,
+  autoReseedOnExtinction: false,
   extinctionReseedDelay: 2,
 
   seed: "surviving-the-fitness-space",

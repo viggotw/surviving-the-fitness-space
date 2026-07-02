@@ -17,13 +17,16 @@ export class Renderer3D {
   private readonly organismView: OrganismView;
 
   constructor(canvas: HTMLCanvasElement, maxOrganisms: number) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x000000, 0);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
+    // No opaque scene background: the fitness plane's non-viable area is a
+    // genuinely transparent void, so the page behind the canvas shows
+    // through rather than a flat color painted by the 3D scene.
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0a0c);
 
     this.camera = createIsometricCamera(canvas.clientWidth / (canvas.clientHeight || 1) || 1);
 

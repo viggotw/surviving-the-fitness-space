@@ -51,10 +51,17 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     evolvable properties. Traits that *are* heritable/mutated per organism (`growthRate`,
     `variationRadius`, `hue`) still live on the `Organism` object itself.
   - `Landscape.ts` — the fitness landscape as moving/deforming metaball `ViabilityBlob`s.
-    `isViable(x, y, time)` is strictly binary (no gradient fitness). `update()` advances blob
-    *position* statefully (drift + soft containment/clamp at bounds); deformation (`phase`) is
-    instead a pure function of the `time` argument passed to `fieldValue`/`isViable`, so viability
-    queries are reproducible without needing `update()` to have been called first.
+    `isViable(x, y, time)` is strictly binary (no gradient fitness). `update()` statefully advances
+    blob *position* (a persistent random-walk on heading, not a fixed straight-line drift, plus
+    soft containment/clamp at bounds) and blob *population membership* (removing blobs whose life
+    cycle has fully shrunk away, stochastically spawning new ones so the population hovers near
+    `viabilityBlobCount`). Each blob's deformation (`phase`) and grow-in/hold/shrink-out envelope
+    (`birthTime`, `growDuration`, `shrinkDuration`, `lifespan`) are instead pure functions of the
+    `time` argument passed to `fieldValue`/`isViable` — every one of those fields is fixed once a
+    blob exists, so viability queries stay reproducible without needing `update()` to have been
+    called first, even though *which* blobs currently exist is itself state built up by `update()`
+    calls. This is what makes shapes form out of nothing and shrink back out of existence, and
+    keeps drift from settling into a repeating back-and-forth bounce.
   - `Organism.ts` — the `Organism` type and its asynchronous per-organism lifecycle
     (`alive → dying` on leaving a viable region, `alive → bursting → removed` on reaching the
     live `params.burstRadius`, spawning exactly `params.offspringCount` mutated offspring).

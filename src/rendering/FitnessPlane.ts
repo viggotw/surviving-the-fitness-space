@@ -1,8 +1,21 @@
 import * as THREE from "three";
-import type { Landscape } from "../simulation/Landscape";
+import { FIELD_THRESHOLD, type Landscape } from "../simulation/Landscape";
 
-const GRAPHITE = { r: 18, g: 20, b: 24 };
 const GLOW = { r: 64, g: 200, b: 210 };
+// const GLOW = { r: 254, g: 254, b: 254 };
+
+/**
+ * Half-width, in `fieldValue` units, of the smoothstep band around
+ * `FIELD_THRESHOLD` used to anti-alias the boundary. Narrow enough that the
+ * edge still reads as sharp rather than the old wide gradient falloff — this
+ * only removes texel-grid staircasing, it doesn't blur the shape.
+ */
+const EDGE_BAND = 0.04;
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 /**
  * Renders the fitness landscape as a Canvas2D texture on a floating slab.
@@ -20,7 +33,7 @@ export class FitnessPlane {
   private readonly updateIntervalMs: number;
   private lastUpdateMs = -Infinity;
 
-  constructor(worldSize: number, resolution = 128, updateIntervalMs = 50) {
+  constructor(worldSize: number, resolution = 256, updateIntervalMs = 50) {
     this.worldSize = worldSize;
     this.resolution = resolution;
     this.updateIntervalMs = updateIntervalMs;
@@ -40,6 +53,7 @@ export class FitnessPlane {
       map: this.texture,
       roughness: 0.85,
       metalness: 0.05,
+      transparent: true,
     });
 
     this.mesh = new THREE.Mesh(geometry, material);
@@ -61,13 +75,21 @@ export class FitnessPlane {
       const y = half - (row / (resolution - 1)) * worldSize;
       for (let col = 0; col < resolution; col++) {
         const x = -half + (col / (resolution - 1)) * worldSize;
-        const field = Math.min(1, landscape.fieldValue(x, y, time));
+        // Anti-aliased binary edge: coverage is ~0 or ~1 almost everywhere,
+        // transitioning smoothly only within EDGE_BAND of the viability
+        // threshold, so the shape reads as sharp-edged rather than a soft
+        // glow, without the staircase aliasing a hard per-texel cutoff gives.
+        const field = landscape.fieldValue(x, y, time);
+        const coverage = smoothstep(FIELD_THRESHOLD - EDGE_BAND, FIELD_THRESHOLD + EDGE_BAND, field);
         const idx = (row * resolution + col) * 4;
 
-        image.data[idx] = GRAPHITE.r + (GLOW.r - GRAPHITE.r) * field;
-        image.data[idx + 1] = GRAPHITE.g + (GLOW.g - GRAPHITE.g) * field;
-        image.data[idx + 2] = GRAPHITE.b + (GLOW.b - GRAPHITE.b) * field;
-        image.data[idx + 3] = 255;
+        // The void is genuinely transparent (alpha 0), not a flat black
+        // fill, so nothing renders there at all — no lit-plane shading
+        // artifact, and whatever's behind the scene shows through instead.
+        image.data[idx] = GLOW.r;
+        image.data[idx + 1] = GLOW.g;
+        image.data[idx + 2] = GLOW.b;
+        image.data[idx + 3] = coverage * 255;
       }
     }
 

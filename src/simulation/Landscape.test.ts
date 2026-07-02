@@ -104,4 +104,50 @@ describe("Landscape", () => {
     }
     expect(a.getBlobs()).toEqual(b.getBlobs());
   });
+
+  it("blob headings wander instead of drifting in a fixed straight line", () => {
+    const landscape = makeLandscape(42);
+    const initialVelocities = landscape.getBlobs().map((b) => ({ vx: b.vx, vy: b.vy }));
+    for (let i = 0; i < 300; i++) {
+      landscape.update(1 / 30, 1, 1, 1);
+    }
+    const changed = landscape.getBlobs().some((b, i) => {
+      const before = initialVelocities[i];
+      return before === undefined || b.vx !== before.vx || b.vy !== before.vy;
+    });
+    expect(changed).toBe(true);
+  });
+
+  it("a freshly spawned blob starts invisible and grows in over time", () => {
+    const params = { ...DEFAULT_PARAMETERS, viabilityBlobCount: 1 };
+    const landscape = new Landscape(new Random(7), params, BOUNDS);
+
+    // Drain the initial (already-grown) blob's lifespan so the population
+    // drops to zero and a fresh one has to be spawned to replace it.
+    let spawned: ReturnType<Landscape["getBlobs"]>[number] | undefined;
+    for (let i = 0; i < 2000 && !spawned; i++) {
+      landscape.update(0.1, 1, 1, 1);
+      const blobs = landscape.getBlobs();
+      if (blobs.length === 1 && blobs[0].birthTime > 0) spawned = blobs[0];
+    }
+    expect(spawned).toBeDefined();
+    if (!spawned) return;
+
+    // At the instant of its own birth, a blob contributes nothing to the field.
+    expect(landscape.fieldValue(spawned.x, spawned.y, spawned.birthTime)).toBe(0);
+    // Partway through its grow-in ramp it's visible but not yet at full strength.
+    const midGrow = spawned.birthTime + spawned.growDuration / 2;
+    const midField = landscape.fieldValue(spawned.x, spawned.y, midGrow);
+    const fullField = landscape.fieldValue(spawned.x, spawned.y, spawned.birthTime + spawned.growDuration + 1);
+    expect(midField).toBeGreaterThan(0);
+    expect(midField).toBeLessThan(fullField);
+  });
+
+  it("a blob shrinks fully out of existence and is removed by the end of its lifespan", () => {
+    const landscape = makeLandscape(13);
+    const blob = landscape.getBlobs()[0];
+    for (let i = 0; i < 500; i++) landscape.update(0.2, 1, 1, 1);
+    const stillPresent = landscape.getBlobs().some((b) => b.id === blob.id);
+    expect(stillPresent).toBe(false);
+  });
 });
