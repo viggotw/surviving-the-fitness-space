@@ -1,6 +1,6 @@
 import { Pane } from "tweakpane";
 import type { Simulation } from "../simulation/Simulation";
-import { MIN_BURST_RADIUS, MIN_GROWTH_RATE, WORLD_SIZE } from "../simulation/Parameters";
+import { MIN_BIRTH_RADIUS, MIN_BURST_RADIUS, MIN_GROWTH_RATE, WORLD_SIZE } from "../simulation/Parameters";
 
 /**
  * Raw trait-space units (`Parameters.ts`'s stable numeric contract, e.g.
@@ -36,6 +36,8 @@ interface ControlsState {
   /** % of WORLD_SIZE per second — see SIZE_DISPLAY_SCALE */
   growthRate: number;
   /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
+  birthRadius: number;
+  /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
   burstRadius: number;
   growthStartDelayMax: number;
   offspringCount: number;
@@ -69,6 +71,7 @@ export class Controls {
       edgeFadeWidth: p.edgeFadeWidth,
       variationRadius: toDisplaySize(p.variationRadius),
       growthRate: toDisplaySize(p.growthRate),
+      birthRadius: toDisplaySize(p.birthRadius),
       burstRadius: toDisplaySize(p.burstRadius),
       growthStartDelayMax: p.growthStartDelayMax,
       offspringCount: p.offspringCount,
@@ -136,6 +139,13 @@ export class Controls {
         step: 0.01,
       })
       .on("change", (ev) => simulation.setParams({ growthRate: fromDisplaySize(ev.value) }));
+    organisms
+      .addBinding(this.state, "birthRadius", {
+        label: "Birth radius (%)",
+        ...centeredFromMin(this.state.birthRadius, toDisplaySize(MIN_BIRTH_RADIUS)),
+        step: 0.05,
+      })
+      .on("change", (ev) => simulation.setParams({ birthRadius: fromDisplaySize(ev.value) }));
     organisms
       .addBinding(this.state, "burstRadius", {
         label: "Burst radius (%)",

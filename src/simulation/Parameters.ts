@@ -16,6 +16,7 @@ export function computeWorldBounds(aspect: number): { width: number; height: num
 /** Floors enforced by `clampParameters`, exported so the Controls panel can build slider ranges around them without duplicating the numbers. */
 export const MIN_GROWTH_RATE = 0.001;
 export const MIN_BURST_RADIUS = 0.01;
+export const MIN_BIRTH_RADIUS = 0.001;
 
 export interface SimulationParameters {
   /** organisms */
@@ -31,6 +32,9 @@ export interface SimulationParameters {
    * `growthStartDelayMax` below.
    */
   growthRate: number;
+
+  /** trait-space units (radius); every organism's starting size at spawn — controlled live via the panel, same as `growthRate`/`burstRadius` */
+  birthRadius: number;
 
   /** trait-space units (radius); predefined size every organism grows to before bursting — controlled live via the panel */
   burstRadius: number;
@@ -98,12 +102,13 @@ export interface SimulationParameters {
 }
 
 export const DEFAULT_PARAMETERS: SimulationParameters = {
-  initialOrganisms: 40,
-  maxOrganisms: 600,
+  initialOrganisms: 15,
+  maxOrganisms: 200,
 
-  growthRate: 0.0075,
+  growthRate: 0.025,
 
-  burstRadius: 0.025,
+  birthRadius: 0.1,
+  burstRadius: 0.15,
   growthStartDelayMax: 0.5,
 
   offspringCount: 3,
@@ -136,6 +141,7 @@ export function clampParameters(p: Partial<SimulationParameters>): Partial<Simul
   if (clamped.initialOrganisms !== undefined) clamped.initialOrganisms = Math.max(0, Math.floor(clamped.initialOrganisms));
   if (clamped.maxOrganisms !== undefined) clamped.maxOrganisms = Math.max(1, Math.floor(clamped.maxOrganisms));
   if (clamped.growthRate !== undefined) clamped.growthRate = Math.max(MIN_GROWTH_RATE, clamped.growthRate);
+  if (clamped.birthRadius !== undefined) clamped.birthRadius = Math.max(MIN_BIRTH_RADIUS, clamped.birthRadius);
   if (clamped.burstRadius !== undefined) clamped.burstRadius = Math.max(MIN_BURST_RADIUS, clamped.burstRadius);
   if (clamped.growthStartDelayMax !== undefined) clamped.growthStartDelayMax = Math.max(0, clamped.growthStartDelayMax);
   if (clamped.offspringCount !== undefined) clamped.offspringCount = Math.max(1, Math.floor(clamped.offspringCount));

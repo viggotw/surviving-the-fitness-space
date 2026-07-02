@@ -35,8 +35,6 @@ export type Organism = {
   state: OrganismState;
 };
 
-const BIRTH_RADIUS = 0.02;
-
 function wrapHue(hue: number): number {
   return ((hue % 1) + 1) % 1;
 }
@@ -74,7 +72,7 @@ export function createOrganism(
       x,
       y,
       age: 0,
-      radius: BIRTH_RADIUS,
+      radius: params.birthRadius,
       opacity: 1,
       spawnDelay: rng.range(0, params.growthStartDelayMax),
       variationRadius: Math.max(0, params.variationRadius),
@@ -89,7 +87,7 @@ export function createOrganism(
     x,
     y,
     age: 0,
-    radius: BIRTH_RADIUS,
+    radius: params.birthRadius,
     opacity: 1,
     spawnDelay: rng.range(0, params.growthStartDelayMax),
     variationRadius: mutate(parent.variationRadius, params.variationRadiusMutation, rng, 0),
