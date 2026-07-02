@@ -44,12 +44,21 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     injected `Random` instance so a given seed reproduces identical runs.
   - `Parameters.ts` — the `SimulationParameters` type and `DEFAULT_PARAMETERS`. Field names here
     are treated as a stable contract (e.g. `burstRadius`, `variationRadius`, `offspringCount`,
-    `environmentDriftSpeed`) — extend rather than rename when adding features. `burstRadius` and
-    `offspringCount` are deliberately *not* per-organism heritable traits: every organism reads
-    them live from the current params each tick, so they act as global, controls-panel-driven
-    rules ("grow to this predefined size, then pop into exactly this many children") rather than
-    evolvable properties. Traits that *are* heritable/mutated per organism (`growthRate`,
-    `variationRadius`, `hue`) still live on the `Organism` object itself.
+    `environmentDriftSpeed`) — extend rather than rename when adding features. `burstRadius`,
+    `growthRate`, and `offspringCount` are deliberately *not* per-organism heritable traits: every
+    organism reads them live from the current params each tick, so they act as global,
+    controls-panel-driven rules ("grow at this predefined rate to this predefined size, then pop
+    into exactly this many children") rather than evolvable properties — growth and bursting are
+    both fully deterministic given an organism's age. Traits that *are* heritable/mutated per
+    organism (`variationRadius`, `hue`) still live on the `Organism` object itself, alongside
+    `spawnDelay` — a small delay (uniform in `[0, growthStartDelayMax]`) drawn fresh at spawn, not
+    inherited, that a newly created organism waits out before it starts growing. `growthRate` used
+    to be heritable/mutated too, but sharing one global rate plus this delay is the fix for a
+    real bug: with growth (and bursting) fully deterministic, an entire cohort born in the same
+    tick would otherwise grow and burst in perfect lockstep forever, and the population would
+    visibly "blink" in sync once enough cohorts converged onto shared phase. `spawnDelay` is the
+    only source of randomness in the growth cycle, kept deliberately small — just enough to break
+    lockstep, not enough to visibly stagger growth.
   - `Landscape.ts` — the fitness landscape as moving/deforming metaball `ViabilityBlob`s.
     `isViable(x, y, time)` is strictly binary (no gradient fitness). `update()` statefully advances
     blob *position* (a persistent random-walk on heading, not a fixed straight-line drift, plus

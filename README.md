@@ -19,21 +19,29 @@ npm run build     # production build
 
 ## Controls panel
 
+Every slider's range is centered on its default — the lever sits in the middle of the track
+out of the box, left of center is slower/smaller, right of center is faster/bigger.
+
 **Environment** — governs the slow-moving, deforming viable regions (the "lava-lamp" pattern):
 
 | Control | Unit |
 |---|---|
 | Drift speed | multiplier on how fast regions move |
-| Deform speed | multiplier on how fast regions pulse/deform |
+| Deform speed | multiplier on how fast regions pulse/deform, and on how fast regions themselves form and dissolve |
 | Deform strength | multiplier on how much regions pulse/deform |
 
-**Organisms** — governs individual growth and reproduction:
+**Organisms** — governs individual growth and reproduction. Sizes are shown as a percentage of
+the fitness space's half-width, not raw trait-space units, so they read as "how big relative to
+the play area" instead of tiny decimals. Growth rate and burst radius are shared and
+deterministic — every organism grows at the exact same rate to the exact same size before
+bursting, not a per-organism trait:
 
 | Control | Unit |
 |---|---|
-| Growth rate | trait-space units of radius per second |
-| Burst radius | trait-space units; the predefined size every organism grows to before bursting |
-| Variation radius | trait-space units; max distance offspring spawn from their parent |
+| Growth rate | % of the fitness space's half-width, per second |
+| Burst radius | % of the fitness space's half-width; the predefined size every organism grows to before bursting |
+| Spawn delay, max | seconds; each organism waits a random delay in `[0, this]` after spawning before it starts growing — the only source of randomness in growth timing, kept small enough to just break lockstep between same-tick cohorts without visibly staggering growth |
+| Variation radius | % of the fitness space's half-width; max distance offspring spawn from their parent |
 | Offspring count | exact number of children produced on every burst |
 
 **Population** — seeding and headcount bookkeeping:
@@ -43,6 +51,7 @@ npm run build     # production build
 | Seed count / Seed population | organisms to add on demand |
 | Max population | hard cap; the oldest organisms are displaced to make room for new offspring |
 | Population | live organism count (read-only) |
+| Auto-reseed on extinction | if enabled, automatically reseeds the population after it dies out |
 
 ## Project status
 

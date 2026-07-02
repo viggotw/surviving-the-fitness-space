@@ -19,8 +19,12 @@ export type Organism = {
   /** 0–1 */
   opacity: number;
 
-  /** trait-space units of radius per second (heritable, mutated per generation) */
-  growthRate: number;
+  /**
+   * seconds; drawn once at spawn from [0, params.growthStartDelayMax]. The
+   * organism holds at its birth radius until `age` passes this, then grows
+   * at the shared, deterministic `params.growthRate` — see updateOrganism.
+   */
+  spawnDelay: number;
   /** trait-space units (radius); heritable, mutated per generation */
   variationRadius: number;
 
@@ -40,8 +44,17 @@ function isOutOfBounds(x: number, y: number): boolean {
   return Math.abs(x) > WORLD_SIZE || Math.abs(y) > WORLD_SIZE;
 }
 
+/**
+ * Additive gaussian mutation with a *reflecting* floor: an undershoot below
+ * `min` bounces back above it by the same distance, instead of being
+ * absorbed onto `min` exactly. A hard `Math.max(min, ...)` clamp maps every
+ * undershoot to the identical floor value, and over many generations that
+ * piles up an ever-growing exact-duplicate spike — reflecting keeps the
+ * distribution continuous instead.
+ */
 export function mutate(value: number, mutationAmount: number, rng: Random, min = 0.001): number {
-  return Math.max(min, value + rng.gaussian(0, mutationAmount));
+  const raw = value + rng.gaussian(0, mutationAmount);
+  return raw < min ? 2 * min - raw : raw;
 }
 
 /** Creates a root organism (no parent) or an offspring with heritable, mutated traits. */
@@ -61,7 +74,7 @@ export function createOrganism(
       age: 0,
       radius: BIRTH_RADIUS,
       opacity: 1,
-      growthRate: Math.max(0.001, params.growthRate + rng.gaussian(0, params.growthRateVariation)),
+      spawnDelay: rng.range(0, params.growthStartDelayMax),
       variationRadius: Math.max(0, params.variationRadius),
       hue: rng.next(),
       state: isOutOfBounds(x, y) ? "dying" : "alive",
@@ -76,7 +89,7 @@ export function createOrganism(
     age: 0,
     radius: BIRTH_RADIUS,
     opacity: 1,
-    growthRate: mutate(parent.growthRate, params.growthRateMutation, rng),
+    spawnDelay: rng.range(0, params.growthStartDelayMax),
     variationRadius: mutate(parent.variationRadius, params.variationRadiusMutation, rng, 0),
     hue: wrapHue(parent.hue + rng.gaussian(0, params.hueMutation)),
     state: isOutOfBounds(x, y) ? "dying" : "alive",
@@ -106,7 +119,20 @@ export function updateOrganism(
       return offspring;
     }
 
-    o.radius += o.growthRate * dt;
+    // Growth is fully deterministic and identical for every organism (the
+    // live params.growthRate, not a per-organism trait) once its spawn
+    // delay has elapsed — see the `spawnDelay` doc comment on Organism.
+    // Grow only for the fraction of *this* tick that falls after the delay:
+    // ticks are a coarse, shared grid (dt), so without this, every organism
+    // whose continuous, distinct spawnDelay happens to fall in the same
+    // dt-wide window would all start growing on the exact same tick and
+    // produce bit-for-bit identical radii forever after — the delay's
+    // randomness would be quantized away entirely.
+    const ageBeforeTick = o.age - dt;
+    if (o.age >= o.spawnDelay) {
+      const growDuration = ageBeforeTick >= o.spawnDelay ? dt : o.age - o.spawnDelay;
+      o.radius += params.growthRate * growDuration;
+    }
 
     if (o.radius >= params.burstRadius) {
       o.state = "bursting";

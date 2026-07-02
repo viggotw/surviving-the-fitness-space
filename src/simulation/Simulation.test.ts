@@ -34,7 +34,6 @@ describe("Simulation", () => {
       maxOrganisms: 5,
       burstRadius: 0.1,
       growthRate: 20,
-      growthRateVariation: 0,
       offspringCount: 4,
     });
     sim.seedPopulation(3);
@@ -49,7 +48,6 @@ describe("Simulation", () => {
       maxOrganisms: 4,
       burstRadius: 0.1,
       growthRate: 20,
-      growthRateVariation: 0,
       offspringCount: 4,
     });
     sim.seedPopulation(1); // a single parent, about to burst

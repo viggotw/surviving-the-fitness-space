@@ -1,5 +1,28 @@
 import { Pane } from "tweakpane";
 import type { Simulation } from "../simulation/Simulation";
+import { MIN_BURST_RADIUS, MIN_GROWTH_RATE, WORLD_SIZE } from "../simulation/Parameters";
+
+/**
+ * Raw trait-space units (`Parameters.ts`'s stable numeric contract, e.g.
+ * `burstRadius: 0.05`) read as tiny, unintuitive decimals to a user. This
+ * panel instead displays organism sizes as a percentage of the fitness
+ * space's half-width (`WORLD_SIZE`), so "burst radius 1%" reads naturally
+ * as "1% of the play area" — only the display/edit layer is rescaled;
+ * `Simulation`/`Parameters` still store and consume raw trait-space units.
+ */
+const SIZE_DISPLAY_SCALE = 100 / WORLD_SIZE;
+const toDisplaySize = (raw: number): number => raw * SIZE_DISPLAY_SCALE;
+const fromDisplaySize = (display: number): number => display / SIZE_DISPLAY_SCALE;
+
+/** A range with `min` fixed and `max` solved so `value` sits exactly at the midpoint — keeps the slider lever centered on the current default. */
+function centeredFromMin(value: number, min: number): { min: number; max: number } {
+  return { min, max: 2 * value - min };
+}
+
+/** A range with `max` fixed and `min` solved so `value` sits exactly at the midpoint. */
+function centeredFromMax(value: number, max: number): { min: number; max: number } {
+  return { min: 2 * value - max, max };
+}
 
 interface ControlsState {
   playing: boolean;
@@ -7,9 +30,13 @@ interface ControlsState {
   environmentDriftSpeed: number;
   environmentDeformationSpeed: number;
   environmentDeformationStrength: number;
+  /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
   variationRadius: number;
+  /** % of WORLD_SIZE per second — see SIZE_DISPLAY_SCALE */
   growthRate: number;
+  /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
   burstRadius: number;
+  growthStartDelayMax: number;
   offspringCount: number;
   maxOrganisms: number;
   population: number;
@@ -38,9 +65,10 @@ export class Controls {
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
       environmentDeformationStrength: p.environmentDeformationStrength,
-      variationRadius: p.variationRadius,
-      growthRate: p.growthRate,
-      burstRadius: p.burstRadius,
+      variationRadius: toDisplaySize(p.variationRadius),
+      growthRate: toDisplaySize(p.growthRate),
+      burstRadius: toDisplaySize(p.burstRadius),
+      growthStartDelayMax: p.growthStartDelayMax,
       offspringCount: p.offspringCount,
       maxOrganisms: p.maxOrganisms,
       population: simulation.population,
@@ -56,49 +84,95 @@ export class Controls {
     this.pane.addButton({ title: "Reset" }).on("click", () => onReset());
 
     // Environment: governs the moving/deforming viable regions (the "lava-lamp" pattern).
+    // Every slider range below is solved so today's default sits at the
+    // lever's center — pushing left slows/shrinks it, right speeds/grows it.
     const environment = this.pane.addFolder({ title: "Environment", expanded: true });
     environment
-      .addBinding(this.state, "environmentDriftSpeed", { label: "Drift speed (×)", min: 0, max: 1, step: 0.005 })
+      .addBinding(this.state, "environmentDriftSpeed", {
+        label: "Drift speed (×)",
+        ...centeredFromMin(p.environmentDriftSpeed, 0),
+        step: 0.005,
+      })
       .on("change", (ev) => simulation.setParams({ environmentDriftSpeed: ev.value }));
     environment
-      .addBinding(this.state, "environmentDeformationSpeed", { label: "Deform speed (×)", min: 0, max: 1, step: 0.005 })
+      .addBinding(this.state, "environmentDeformationSpeed", {
+        label: "Deform speed (×)",
+        ...centeredFromMin(p.environmentDeformationSpeed, 0),
+        step: 0.005,
+      })
       .on("change", (ev) => simulation.setParams({ environmentDeformationSpeed: ev.value }));
     environment
-      // Capped at 2, not higher: each blob's own wobble amplitude tops out
-      // at 0.35, so above ~2.86× here `1 + wobble * wave` can cross zero and
-      // the effective radius flips sign — capping at 2 keeps it always
-      // positive so the slider can't produce that glitch.
-      .addBinding(this.state, "environmentDeformationStrength", { label: "Deform strength (×)", min: 0, max: 2, step: 0.01 })
+      // Each blob's own wobble amplitude tops out at 0.35, so once this
+      // multiplier crosses ~2.86× the `1 + wobble * wave` term can cross
+      // zero and the effective radius flips sign. The centered range below
+      // stays well under that regardless of the current default.
+      .addBinding(this.state, "environmentDeformationStrength", {
+        label: "Deform strength (×)",
+        ...centeredFromMin(p.environmentDeformationStrength, 0),
+        step: 0.01,
+      })
       .on("change", (ev) => simulation.setParams({ environmentDeformationStrength: ev.value }));
 
     // Organisms: governs individual growth, reproduction, and heritable variation.
     const organisms = this.pane.addFolder({ title: "Organisms", expanded: true });
     organisms
       .addBinding(this.state, "growthRate", {
-        label: "Growth rate (units/s)",
-        min: 0.0005,
-        max: 0.03,
-        step: 0.0005,
+        label: "Growth rate (%/s)",
+        ...centeredFromMin(this.state.growthRate, toDisplaySize(MIN_GROWTH_RATE)),
+        step: 0.01,
       })
-      .on("change", (ev) => simulation.setParams({ growthRate: ev.value }));
+      .on("change", (ev) => simulation.setParams({ growthRate: fromDisplaySize(ev.value) }));
     organisms
-      .addBinding(this.state, "burstRadius", { label: "Burst radius (units)", min: 0.01, max: 0.3, step: 0.005 })
-      .on("change", (ev) => simulation.setParams({ burstRadius: ev.value }));
+      .addBinding(this.state, "burstRadius", {
+        label: "Burst radius (%)",
+        ...centeredFromMin(this.state.burstRadius, toDisplaySize(MIN_BURST_RADIUS)),
+        step: 0.1,
+      })
+      .on("change", (ev) => simulation.setParams({ burstRadius: fromDisplaySize(ev.value) }));
     organisms
-      .addBinding(this.state, "variationRadius", { label: "Variation radius (units)", min: 0, max: 0.6, step: 0.01 })
-      .on("change", (ev) => simulation.setParams({ variationRadius: ev.value }));
+      // Growth rate and burst radius are both shared/deterministic, so a
+      // cohort born in the same tick would otherwise grow and burst in
+      // perfect lockstep forever. This small random per-organism delay
+      // before growth starts is the only source of variation in growth
+      // timing — just enough to break that lockstep, not to visibly
+      // stagger growth.
+      .addBinding(this.state, "growthStartDelayMax", {
+        label: "Spawn delay, max (s)",
+        ...centeredFromMin(p.growthStartDelayMax, 0),
+        step: 0.01,
+      })
+      .on("change", (ev) => simulation.setParams({ growthStartDelayMax: ev.value }));
     organisms
-      .addBinding(this.state, "offspringCount", { label: "Offspring count (children)", min: 1, max: 10, step: 1 })
+      .addBinding(this.state, "variationRadius", {
+        label: "Variation radius (%)",
+        ...centeredFromMin(this.state.variationRadius, 0),
+        step: 0.2,
+      })
+      .on("change", (ev) => simulation.setParams({ variationRadius: fromDisplaySize(ev.value) }));
+    organisms
+      .addBinding(this.state, "offspringCount", {
+        label: "Offspring count (children)",
+        ...centeredFromMin(p.offspringCount, 1),
+        step: 1,
+      })
       .on("change", (ev) => simulation.setParams({ offspringCount: ev.value }));
 
     // Population: seeding and overall headcount bookkeeping.
     const population = this.pane.addFolder({ title: "Population", expanded: true });
-    population.addBinding(this.state, "seedCount", { label: "Seed count (organisms)", min: 1, max: 200, step: 1 });
+    population.addBinding(this.state, "seedCount", {
+      label: "Seed count (organisms)",
+      ...centeredFromMin(this.state.seedCount, 1),
+      step: 1,
+    });
     population.addButton({ title: "Seed population" }).on("click", () => {
       simulation.seedPopulation(this.state.seedCount);
     });
     population
-      .addBinding(this.state, "maxOrganisms", { label: "Max population (organisms)", min: 10, max: 1000, step: 10 })
+      .addBinding(this.state, "maxOrganisms", {
+        label: "Max population (organisms)",
+        ...centeredFromMax(p.maxOrganisms, 1000),
+        step: 10,
+      })
       .on("change", (ev) => simulation.setParams({ maxOrganisms: ev.value }));
     population.addBinding(this.state, "population", {
       label: "Population (organisms)",

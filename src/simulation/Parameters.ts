@@ -1,21 +1,40 @@
 /** Half-extent of the fitness space along each axis; trait coordinates range roughly [-WORLD_SIZE, WORLD_SIZE]. */
 export const WORLD_SIZE = 5;
 
+/** Floors enforced by `clampParameters`, exported so the Controls panel can build slider ranges around them without duplicating the numbers. */
+export const MIN_GROWTH_RATE = 0.001;
+export const MIN_BURST_RADIUS = 0.01;
+
 export interface SimulationParameters {
   /** organisms */
   initialOrganisms: number;
   /** organisms */
   maxOrganisms: number;
 
-  /** trait-space units of radius per second */
+  /**
+   * trait-space units of radius per second; predefined, identical for every
+   * organism (not heritable/mutated) — controlled live via the panel, same
+   * as `burstRadius`. Growth and bursting are both fully deterministic
+   * given an organism's age; the only randomness in the growth cycle is
+   * `growthStartDelayMax` below.
+   */
   growthRate: number;
-  /** trait-space units/second (stddev applied once, to the initial population) */
-  growthRateVariation: number;
-  /** trait-space units/second (stddev applied per generation, parent → offspring) */
-  growthRateMutation: number;
 
   /** trait-space units (radius); predefined size every organism grows to before bursting — controlled live via the panel */
   burstRadius: number;
+
+  /**
+   * seconds; each organism, on spawning, waits a delay drawn uniformly from
+   * [0, growthStartDelayMax] before it starts growing (radius holds at its
+   * birth size until then). This is the *only* source of variation in
+   * growth timing — with growth rate and burst radius both fully shared and
+   * deterministic, a whole cohort born in the same tick (all offspring of
+   * one burst, or the initial seed population) would otherwise grow and
+   * burst in perfect lockstep forever, reading as the population "blinking"
+   * in sync. Keep this small: it only needs to be large enough to break
+   * that lockstep, not to visibly stagger growth.
+   */
+  growthStartDelayMax: number;
 
   /** children per burst; predefined, exact count produced on every burst — controlled live via the panel */
   offspringCount: number;
@@ -60,10 +79,9 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   maxOrganisms: 600,
 
   growthRate: 0.005,
-  growthRateVariation: 0.002,
-  growthRateMutation: 0.0008,
 
   burstRadius: 0.05,
+  growthStartDelayMax: 0.5,
 
   offspringCount: 3,
 
@@ -93,8 +111,9 @@ export function clampParameters(p: Partial<SimulationParameters>): Partial<Simul
   const clamped: Partial<SimulationParameters> = { ...p };
   if (clamped.initialOrganisms !== undefined) clamped.initialOrganisms = Math.max(0, Math.floor(clamped.initialOrganisms));
   if (clamped.maxOrganisms !== undefined) clamped.maxOrganisms = Math.max(1, Math.floor(clamped.maxOrganisms));
-  if (clamped.growthRate !== undefined) clamped.growthRate = Math.max(0.001, clamped.growthRate);
-  if (clamped.burstRadius !== undefined) clamped.burstRadius = Math.max(0.01, clamped.burstRadius);
+  if (clamped.growthRate !== undefined) clamped.growthRate = Math.max(MIN_GROWTH_RATE, clamped.growthRate);
+  if (clamped.burstRadius !== undefined) clamped.burstRadius = Math.max(MIN_BURST_RADIUS, clamped.burstRadius);
+  if (clamped.growthStartDelayMax !== undefined) clamped.growthStartDelayMax = Math.max(0, clamped.growthStartDelayMax);
   if (clamped.offspringCount !== undefined) clamped.offspringCount = Math.max(1, Math.floor(clamped.offspringCount));
   if (clamped.variationRadius !== undefined) clamped.variationRadius = Math.max(0, clamped.variationRadius);
   if (clamped.viabilityBlobCount !== undefined) clamped.viabilityBlobCount = Math.max(1, Math.floor(clamped.viabilityBlobCount));
