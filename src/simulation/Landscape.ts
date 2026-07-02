@@ -75,7 +75,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
  */
 export class Landscape {
   private blobs: ViabilityBlob[];
-  private readonly bounds: LandscapeBounds;
+  private bounds: LandscapeBounds;
   private readonly rng: Random;
   private readonly targetBlobCount: number;
   private readonly blobRadiusMin: number;
@@ -224,11 +224,36 @@ export class Landscape {
     return this.fieldValue(x, y, time) >= FIELD_THRESHOLD;
   }
 
+  /**
+   * Continuous 0–1 "how deep inside a viable region" value, used to
+   * gradually throttle growth near an edge without touching the hard
+   * alive/dying boundary at `FIELD_THRESHOLD` itself: 1 once `fieldValue` is
+   * at least `edgeFadeWidth` above the threshold (deep inside a shape),
+   * ramping down to 0 right at the threshold line. `edgeFadeWidth <= 0`
+   * reproduces the original binary behavior exactly — full fitness (1)
+   * everywhere inside, 0 outside, no interior throttling.
+   */
+  fitnessAt(x: number, y: number, time: number, edgeFadeWidth: number): number {
+    const field = this.fieldValue(x, y, time);
+    if (edgeFadeWidth <= 0) return field >= FIELD_THRESHOLD ? 1 : 0;
+    return Math.min(1, Math.max(0, (field - FIELD_THRESHOLD) / edgeFadeWidth));
+  }
+
   getBlobs(): readonly ViabilityBlob[] {
     return this.blobs;
   }
 
   getBounds(): LandscapeBounds {
     return this.bounds;
+  }
+
+  /**
+   * Updates the bounds blobs drift/clamp within (e.g. on window resize).
+   * Existing blobs are left where they are — the containment logic in
+   * `update()` will gently pull any now-out-of-range blob back in on the
+   * next tick rather than teleporting it.
+   */
+  setBounds(bounds: LandscapeBounds): void {
+    this.bounds = bounds;
   }
 }

@@ -1,5 +1,6 @@
 import type { Random } from "./Random";
-import { WORLD_SIZE, type SimulationParameters } from "./Parameters";
+import type { SimulationParameters } from "./Parameters";
+import type { LandscapeBounds } from "./Landscape";
 
 export type OrganismState = "alive" | "dying" | "bursting";
 
@@ -40,8 +41,8 @@ function wrapHue(hue: number): number {
   return ((hue % 1) + 1) % 1;
 }
 
-function isOutOfBounds(x: number, y: number): boolean {
-  return Math.abs(x) > WORLD_SIZE || Math.abs(y) > WORLD_SIZE;
+function isOutOfBounds(x: number, y: number, bounds: LandscapeBounds): boolean {
+  return Math.abs(x) > bounds.width / 2 || Math.abs(y) > bounds.height / 2;
 }
 
 /**
@@ -64,6 +65,7 @@ export function createOrganism(
   y: number,
   parent: Organism | undefined,
   params: SimulationParameters,
+  bounds: LandscapeBounds,
   rng: Random,
 ): Organism {
   if (!parent) {
@@ -77,7 +79,7 @@ export function createOrganism(
       spawnDelay: rng.range(0, params.growthStartDelayMax),
       variationRadius: Math.max(0, params.variationRadius),
       hue: rng.next(),
-      state: isOutOfBounds(x, y) ? "dying" : "alive",
+      state: isOutOfBounds(x, y, bounds) ? "dying" : "alive",
     };
   }
 
@@ -92,7 +94,7 @@ export function createOrganism(
     spawnDelay: rng.range(0, params.growthStartDelayMax),
     variationRadius: mutate(parent.variationRadius, params.variationRadiusMutation, rng, 0),
     hue: wrapHue(parent.hue + rng.gaussian(0, params.hueMutation)),
-    state: isOutOfBounds(x, y) ? "dying" : "alive",
+    state: isOutOfBounds(x, y, bounds) ? "dying" : "alive",
   };
 }
 
@@ -105,8 +107,10 @@ export function updateOrganism(
   o: Organism,
   dt: number,
   isViable: (x: number, y: number, time: number) => boolean,
+  fitnessAt: (x: number, y: number, time: number) => number,
   time: number,
   params: SimulationParameters,
+  bounds: LandscapeBounds,
   rng: Random,
   nextId: () => number,
 ): Organism[] {
@@ -131,7 +135,12 @@ export function updateOrganism(
     const ageBeforeTick = o.age - dt;
     if (o.age >= o.spawnDelay) {
       const growDuration = ageBeforeTick >= o.spawnDelay ? dt : o.age - o.spawnDelay;
-      o.radius += params.growthRate * growDuration;
+      // Fitness (1 deep inside a viable region, ramping to 0 right at its
+      // edge — see Landscape.fitnessAt) throttles growth near the boundary
+      // without touching the alive/dying transition above, which still
+      // flips at the same fixed threshold it always has.
+      const fitness = fitnessAt(o.x, o.y, time);
+      o.radius += params.growthRate * fitness * growDuration;
     }
 
     if (o.radius >= params.burstRadius) {
@@ -141,7 +150,7 @@ export function updateOrganism(
         const dist = rng.range(0, o.variationRadius);
         const ox = o.x + Math.cos(angle) * dist;
         const oy = o.y + Math.sin(angle) * dist;
-        offspring.push(createOrganism(nextId(), ox, oy, o, params, rng));
+        offspring.push(createOrganism(nextId(), ox, oy, o, params, bounds, rng));
       }
     }
     return offspring;

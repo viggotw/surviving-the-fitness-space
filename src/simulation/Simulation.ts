@@ -41,10 +41,22 @@ export class Simulation {
     );
 
     const isViable = (x: number, y: number, t: number) => this.landscape.isViable(x, y, t);
+    const fitnessAt = (x: number, y: number, t: number) =>
+      this.landscape.fitnessAt(x, y, t, this.params.edgeFadeWidth);
     const offspringBuffer: Organism[] = [];
 
     for (const organism of this.organisms) {
-      const offspring = updateOrganism(organism, dt, isViable, this._time, this.params, this.rng, this.nextId);
+      const offspring = updateOrganism(
+        organism,
+        dt,
+        isViable,
+        fitnessAt,
+        this._time,
+        this.params,
+        this.bounds,
+        this.rng,
+        this.nextId,
+      );
       offspringBuffer.push(...offspring);
     }
 
@@ -130,7 +142,7 @@ export class Simulation {
         tries++;
       } while (!this.landscape.isViable(x, y, this._time) && tries < 200);
 
-      this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.rng));
+      this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.bounds, this.rng));
     }
   }
 
@@ -151,11 +163,21 @@ export class Simulation {
       }
       this.organisms = this.organisms.filter((o) => o !== oldest);
     }
-    this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.rng));
+    this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.bounds, this.rng));
   }
 
   setParams(partial: Partial<SimulationParameters>): void {
     Object.assign(this.params, clampParameters(partial));
+  }
+
+  /** Updates the world's trait-space bounds (e.g. on window resize) and propagates them to the landscape. */
+  setBounds(bounds: LandscapeBounds): void {
+    this.bounds = bounds;
+    this.landscape.setBounds(bounds);
+  }
+
+  getBounds(): LandscapeBounds {
+    return this.bounds;
   }
 
   getOrganisms(): ReadonlyArray<Organism> {

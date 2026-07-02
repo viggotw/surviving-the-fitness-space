@@ -3,8 +3,11 @@ import { Random } from "./Random";
 import { DEFAULT_PARAMETERS, WORLD_SIZE } from "./Parameters";
 import { createOrganism, mutate, updateOrganism, isRemovable, type Organism } from "./Organism";
 
+const BOUNDS = { width: WORLD_SIZE * 2, height: WORLD_SIZE * 2 };
+
 const alwaysViable = () => true;
 const neverViable = () => false;
+const alwaysFit = () => 1;
 
 function makeIdGen(start = 1000) {
   let next = start;
@@ -15,10 +18,10 @@ describe("Organism", () => {
   it("grows monotonically over time while inside a viable region", () => {
     const rng = new Random(1);
     const params = { ...DEFAULT_PARAMETERS, growthStartDelayMax: 0 };
-    const o = createOrganism(1, 0, 0, undefined, params, rng);
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
     let lastRadius = o.radius;
     for (let i = 0; i < 5; i++) {
-      updateOrganism(o, 0.05, alwaysViable, i * 0.05, params, rng, makeIdGen());
+      updateOrganism(o, 0.05, alwaysViable, alwaysFit, i * 0.05, params, BOUNDS, rng, makeIdGen());
       expect(o.radius).toBeGreaterThan(lastRadius);
       lastRadius = o.radius;
     }
@@ -27,17 +30,17 @@ describe("Organism", () => {
   it("transitions to 'bursting' once radius reaches burstRadius", () => {
     const rng = new Random(2);
     const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1 };
-    const o = createOrganism(1, 0, 0, undefined, params, rng);
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
     expect(o.state).toBe("alive");
-    updateOrganism(o, 1, alwaysViable, 0, params, rng, makeIdGen());
+    updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(o.state).toBe("bursting");
   });
 
   it("spawns exactly offspringCount children within variationRadius of the parent on burst", () => {
     const rng = new Random(3);
     const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1, variationRadius: 0.4, offspringCount: 5 };
-    const o = createOrganism(1, 0.5, -0.5, undefined, params, rng);
-    const offspring = updateOrganism(o, 1, alwaysViable, 0, params, rng, makeIdGen());
+    const o = createOrganism(1, 0.5, -0.5, undefined, params, BOUNDS, rng);
+    const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(offspring.length).toBe(params.offspringCount);
     for (const child of offspring) {
       const dist = Math.hypot(child.x - o.x, child.y - o.y);
@@ -49,8 +52,8 @@ describe("Organism", () => {
   it("offspring inherit mutated traits, not identical copies", () => {
     const rng = new Random(4);
     const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1 };
-    const o = createOrganism(1, 0, 0, undefined, params, rng);
-    const offspring = updateOrganism(o, 1, alwaysViable, 0, params, rng, makeIdGen());
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const offspring = updateOrganism(o, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(offspring.length).toBeGreaterThan(0);
     const child = offspring[0];
     const traitsDiffer = child.variationRadius !== o.variationRadius || child.hue !== o.hue;
@@ -80,12 +83,12 @@ describe("Organism", () => {
     // not stored/mutated per organism.
     const rng = new Random(12);
     const params = { ...DEFAULT_PARAMETERS, growthRate: 0.05, burstRadius: 0.2, growthStartDelayMax: 0 };
-    const a = createOrganism(1, 0, 0, undefined, params, rng);
-    const b = createOrganism(2, 0, 0, undefined, params, rng);
+    const a = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const b = createOrganism(2, 0, 0, undefined, params, BOUNDS, rng);
     expect(a).not.toHaveProperty("growthRate");
     for (let i = 0; i < 10; i++) {
-      updateOrganism(a, 0.3, alwaysViable, i * 0.3, params, rng, makeIdGen());
-      updateOrganism(b, 0.3, alwaysViable, i * 0.3, params, rng, makeIdGen());
+      updateOrganism(a, 0.3, alwaysViable, alwaysFit, i * 0.3, params, BOUNDS, rng, makeIdGen());
+      updateOrganism(b, 0.3, alwaysViable, alwaysFit, i * 0.3, params, BOUNDS, rng, makeIdGen());
       expect(a.radius).toBeCloseTo(b.radius, 10);
     }
   });
@@ -93,17 +96,17 @@ describe("Organism", () => {
   it("holds at birth radius until spawnDelay elapses, then grows deterministically", () => {
     const rng = new Random(13);
     const params = { ...DEFAULT_PARAMETERS, growthRate: 1, growthStartDelayMax: 1 };
-    const o = createOrganism(1, 0, 0, undefined, params, rng);
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
     o.spawnDelay = 0.5; // force a known delay for a deterministic assertion
     const birthRadius = o.radius;
 
-    updateOrganism(o, 0.2, alwaysViable, 0.2, params, rng, makeIdGen());
+    updateOrganism(o, 0.2, alwaysViable, alwaysFit, 0.2, params, BOUNDS, rng, makeIdGen());
     expect(o.radius).toBe(birthRadius); // still within the delay window
 
-    updateOrganism(o, 0.2, alwaysViable, 0.4, params, rng, makeIdGen());
+    updateOrganism(o, 0.2, alwaysViable, alwaysFit, 0.4, params, BOUNDS, rng, makeIdGen());
     expect(o.radius).toBe(birthRadius); // still within the delay window (age 0.4 < 0.5)
 
-    updateOrganism(o, 0.2, alwaysViable, 0.6, params, rng, makeIdGen());
+    updateOrganism(o, 0.2, alwaysViable, alwaysFit, 0.6, params, BOUNDS, rng, makeIdGen());
     expect(o.radius).toBeGreaterThan(birthRadius); // delay elapsed partway through this tick
   });
 
@@ -116,15 +119,15 @@ describe("Organism", () => {
     // the delay's whole purpose and reproducing the sync/"blinking" bug.
     const rng = new Random(14);
     const params = { ...DEFAULT_PARAMETERS, growthRate: 1 };
-    const a = createOrganism(1, 0, 0, undefined, params, rng);
-    const b = createOrganism(2, 0, 0, undefined, params, rng);
+    const a = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const b = createOrganism(2, 0, 0, undefined, params, BOUNDS, rng);
     a.spawnDelay = 0.31; // both fall inside the same [0.3, 0.35) tick window
     b.spawnDelay = 0.33;
 
     const dt = 0.05;
     for (let i = 0; i < 20; i++) {
-      updateOrganism(a, dt, alwaysViable, i * dt, params, rng, makeIdGen());
-      updateOrganism(b, dt, alwaysViable, i * dt, params, rng, makeIdGen());
+      updateOrganism(a, dt, alwaysViable, alwaysFit, i * dt, params, BOUNDS, rng, makeIdGen());
+      updateOrganism(b, dt, alwaysViable, alwaysFit, i * dt, params, BOUNDS, rng, makeIdGen());
     }
     expect(a.radius).not.toBe(b.radius);
   });
@@ -132,32 +135,32 @@ describe("Organism", () => {
   it("bursts at exactly the predefined burstRadius, not a per-organism value", () => {
     const rng = new Random(8);
     const params = { ...DEFAULT_PARAMETERS, burstRadius: 0.2, growthRate: 1 };
-    const a = createOrganism(1, 0, 0, undefined, params, rng);
-    const b = createOrganism(2, 0, 0, a, params, rng);
-    updateOrganism(a, 1, alwaysViable, 0, params, rng, makeIdGen());
-    updateOrganism(b, 1, alwaysViable, 0, params, rng, makeIdGen());
+    const a = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const b = createOrganism(2, 0, 0, a, params, BOUNDS, rng);
+    updateOrganism(a, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
+    updateOrganism(b, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(a.state).toBe("bursting");
     expect(b.state).toBe("bursting");
 
     // Lowering the live parameter mid-run immediately changes the threshold for everyone.
     const lowered = { ...params, burstRadius: 0.01 };
-    const c = createOrganism(3, 0, 0, undefined, lowered, rng);
-    updateOrganism(c, 0.02, alwaysViable, 0, lowered, rng, makeIdGen());
+    const c = createOrganism(3, 0, 0, undefined, lowered, BOUNDS, rng);
+    updateOrganism(c, 0.02, alwaysViable, alwaysFit, 0, lowered, BOUNDS, rng, makeIdGen());
     expect(c.state).toBe("bursting");
   });
 
   it("becomes 'dying' when it leaves the viable region", () => {
     const rng = new Random(5);
-    const o = createOrganism(1, 0, 0, undefined, DEFAULT_PARAMETERS, rng);
-    updateOrganism(o, 0.1, neverViable, 0, DEFAULT_PARAMETERS, rng, makeIdGen());
+    const o = createOrganism(1, 0, 0, undefined, DEFAULT_PARAMETERS, BOUNDS, rng);
+    updateOrganism(o, 0.1, neverViable, alwaysFit, 0, DEFAULT_PARAMETERS, BOUNDS, rng, makeIdGen());
     expect(o.state).toBe("dying");
   });
 
   it("stays 'alive' while inside a viable region", () => {
     const rng = new Random(6);
     const params = { ...DEFAULT_PARAMETERS, burstRadius: 100 };
-    const o = createOrganism(1, 0, 0, undefined, params, rng);
-    updateOrganism(o, 0.1, alwaysViable, 0, params, rng, makeIdGen());
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    updateOrganism(o, 0.1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(o.state).toBe("alive");
   });
 
@@ -170,11 +173,11 @@ describe("Organism", () => {
       variationRadius: 0.1,
       offspringCount: 1,
     };
-    const o = createOrganism(1, WORLD_SIZE + 1, WORLD_SIZE + 1, undefined, params, rng);
+    const o = createOrganism(1, WORLD_SIZE + 1, WORLD_SIZE + 1, undefined, params, BOUNDS, rng);
     expect(o.state).toBe("dying");
 
-    const parentAtEdge = createOrganism(2, WORLD_SIZE - 0.01, 0, undefined, params, rng);
-    const offspring = updateOrganism(parentAtEdge, 1, alwaysViable, 0, params, rng, makeIdGen());
+    const parentAtEdge = createOrganism(2, WORLD_SIZE - 0.01, 0, undefined, params, BOUNDS, rng);
+    const offspring = updateOrganism(parentAtEdge, 1, alwaysViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(offspring.length).toBe(1);
     for (const child of offspring) {
       if (child.x > WORLD_SIZE || child.x < -WORLD_SIZE || child.y > WORLD_SIZE || child.y < -WORLD_SIZE) {
@@ -185,14 +188,41 @@ describe("Organism", () => {
     }
   });
 
+  it("fitnessAt scales growth: half fitness grows at half the rate", () => {
+    const rngA = new Random(20);
+    const rngB = new Random(20);
+    const params = { ...DEFAULT_PARAMETERS, growthStartDelayMax: 0 };
+    const full = createOrganism(1, 0, 0, undefined, params, BOUNDS, rngA);
+    const half = createOrganism(2, 0, 0, undefined, params, BOUNDS, rngB);
+    const fullRadius = full.radius;
+    const halfRadius = half.radius;
+
+    updateOrganism(full, 1, alwaysViable, () => 1, 0, params, BOUNDS, rngA, makeIdGen());
+    updateOrganism(half, 1, alwaysViable, () => 0.5, 0, params, BOUNDS, rngB, makeIdGen());
+
+    const fullGrowth = full.radius - fullRadius;
+    const halfGrowth = half.radius - halfRadius;
+    expect(halfGrowth).toBeCloseTo(fullGrowth / 2, 10);
+  });
+
+  it("fitnessAt of 0 stalls growth without changing the alive/dying transition", () => {
+    const rng = new Random(21);
+    const params = { ...DEFAULT_PARAMETERS, growthStartDelayMax: 0 };
+    const o = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    const before = o.radius;
+    updateOrganism(o, 1, alwaysViable, () => 0, 0, params, BOUNDS, rng, makeIdGen());
+    expect(o.radius).toBe(before);
+    expect(o.state).toBe("alive"); // isViable (not fitness) governs alive/dying
+  });
+
   it("isRemovable becomes true once a dying organism's opacity reaches zero", () => {
     const rng = new Random(7);
     const params = { ...DEFAULT_PARAMETERS, deathFadeDuration: 0.2 };
-    const o: Organism = createOrganism(1, 0, 0, undefined, params, rng);
-    updateOrganism(o, 0.1, neverViable, 0, params, rng, makeIdGen());
+    const o: Organism = createOrganism(1, 0, 0, undefined, params, BOUNDS, rng);
+    updateOrganism(o, 0.1, neverViable, alwaysFit, 0, params, BOUNDS, rng, makeIdGen());
     expect(isRemovable(o)).toBe(false);
     for (let i = 0; i < 10; i++) {
-      updateOrganism(o, 0.1, neverViable, i * 0.1, params, rng, makeIdGen());
+      updateOrganism(o, 0.1, neverViable, alwaysFit, i * 0.1, params, BOUNDS, rng, makeIdGen());
     }
     expect(isRemovable(o)).toBe(true);
   });

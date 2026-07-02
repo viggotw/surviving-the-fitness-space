@@ -1,5 +1,5 @@
 import { Simulation } from "../simulation/Simulation";
-import { DEFAULT_PARAMETERS } from "../simulation/Parameters";
+import { DEFAULT_PARAMETERS, computeWorldBounds } from "../simulation/Parameters";
 import { Renderer3D } from "../rendering/Renderer3D";
 import { Controls } from "../ui/Controls";
 import { ExplanationOverlay } from "../ui/ExplanationOverlay";
@@ -11,7 +11,10 @@ if (!canvas || !controlsContainer || !overlayContainer) {
   throw new Error("index.html is missing a required #scene, #controls, or #overlay element");
 }
 
+const windowAspect = (): number => window.innerWidth / (window.innerHeight || 1) || 1;
+
 const simulation = new Simulation(DEFAULT_PARAMETERS);
+simulation.setBounds(computeWorldBounds(windowAspect()));
 simulation.seedPopulation(simulation.params.initialOrganisms);
 
 const renderer = new Renderer3D(canvas, simulation.params.maxOrganisms);
@@ -42,6 +45,7 @@ requestAnimationFrame(frame);
 
 window.addEventListener("resize", () => {
   renderer.resize(window.innerWidth, window.innerHeight);
+  simulation.setBounds(computeWorldBounds(windowAspect()));
 });
 
 // Click anywhere on the scene to spawn a single organism there. If the

@@ -30,6 +30,7 @@ interface ControlsState {
   environmentDriftSpeed: number;
   environmentDeformationSpeed: number;
   environmentDeformationStrength: number;
+  edgeFadeWidth: number;
   /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
   variationRadius: number;
   /** % of WORLD_SIZE per second — see SIZE_DISPLAY_SCALE */
@@ -65,6 +66,7 @@ export class Controls {
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
       environmentDeformationStrength: p.environmentDeformationStrength,
+      edgeFadeWidth: p.edgeFadeWidth,
       variationRadius: toDisplaySize(p.variationRadius),
       growthRate: toDisplaySize(p.growthRate),
       burstRadius: toDisplaySize(p.burstRadius),
@@ -112,6 +114,18 @@ export class Controls {
         step: 0.01,
       })
       .on("change", (ev) => simulation.setParams({ environmentDeformationStrength: ev.value }));
+    environment
+      // 0 reproduces the original hard binary edge exactly (no interior
+      // throttling); higher values widen the interior band near a shape's
+      // edge where growth gradually throttles toward 0, without moving the
+      // actual alive/dying boundary itself.
+      .addBinding(this.state, "edgeFadeWidth", {
+        label: "Edge fading",
+        min: 0,
+        max: 3,
+        step: 0.05,
+      })
+      .on("change", (ev) => simulation.setParams({ edgeFadeWidth: ev.value }));
 
     // Organisms: governs individual growth, reproduction, and heritable variation.
     const organisms = this.pane.addFolder({ title: "Organisms", expanded: true });

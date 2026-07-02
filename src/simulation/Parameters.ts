@@ -1,6 +1,18 @@
 /** Half-extent of the fitness space along each axis; trait coordinates range roughly [-WORLD_SIZE, WORLD_SIZE]. */
 export const WORLD_SIZE = 5;
 
+/**
+ * Trait-space bounds derived from the window's aspect ratio. Height stays
+ * fixed at the originally-tuned `WORLD_SIZE * 2` (so burstRadius/blob-radius
+ * tuning doesn't need to change), while width scales with aspect — the world
+ * always matches the browser window's shape instead of a fixed square, so
+ * viable-region shapes and organisms reach the actual screen edges instead
+ * of being clipped by a square boundary visible mid-scene.
+ */
+export function computeWorldBounds(aspect: number): { width: number; height: number } {
+  return { width: WORLD_SIZE * 2 * aspect, height: WORLD_SIZE * 2 };
+}
+
 /** Floors enforced by `clampParameters`, exported so the Controls panel can build slider ranges around them without duplicating the numbers. */
 export const MIN_GROWTH_RATE = 0.001;
 export const MIN_BURST_RADIUS = 0.01;
@@ -54,6 +66,17 @@ export interface SimulationParameters {
   /** unitless multiplier on each viability blob's base radius-wobble amplitude */
   environmentDeformationStrength: number;
 
+  /**
+   * `Landscape.fieldValue` units (same scale as `FIELD_THRESHOLD`); width of
+   * the interior band, measured above the viability threshold, over which
+   * `Landscape.fitnessAt` ramps from 1 (deep inside a shape) down to 0 right
+   * at the edge. Only throttles `growthRate` — the alive/dying boundary
+   * itself (`Landscape.isViable`) is untouched, so it's still a clear, fixed
+   * line to fall off at. 0 (the default) reproduces the original binary
+   * behavior exactly: full growth everywhere inside, no interior throttling.
+   */
+  edgeFadeWidth: number;
+
   /** blobs */
   viabilityBlobCount: number;
   /** trait-space units (radius) */
@@ -78,14 +101,14 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   initialOrganisms: 40,
   maxOrganisms: 600,
 
-  growthRate: 0.005,
+  growthRate: 0.0075,
 
-  burstRadius: 0.05,
+  burstRadius: 0.025,
   growthStartDelayMax: 0.5,
 
   offspringCount: 3,
 
-  variationRadius: 0.22,
+  variationRadius: 0.5,
   variationRadiusMutation: 0.02,
 
   hueMutation: 0.03,
@@ -93,6 +116,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   environmentDriftSpeed: 0.3,
   environmentDeformationSpeed: 0.08,
   environmentDeformationStrength: 0.3,
+  edgeFadeWidth: 0,
 
   viabilityBlobCount: 5,
   viabilityBlobRadiusMin: 0.7,
@@ -116,6 +140,7 @@ export function clampParameters(p: Partial<SimulationParameters>): Partial<Simul
   if (clamped.growthStartDelayMax !== undefined) clamped.growthStartDelayMax = Math.max(0, clamped.growthStartDelayMax);
   if (clamped.offspringCount !== undefined) clamped.offspringCount = Math.max(1, Math.floor(clamped.offspringCount));
   if (clamped.variationRadius !== undefined) clamped.variationRadius = Math.max(0, clamped.variationRadius);
+  if (clamped.edgeFadeWidth !== undefined) clamped.edgeFadeWidth = Math.max(0, clamped.edgeFadeWidth);
   if (clamped.viabilityBlobCount !== undefined) clamped.viabilityBlobCount = Math.max(1, Math.floor(clamped.viabilityBlobCount));
   return clamped;
 }

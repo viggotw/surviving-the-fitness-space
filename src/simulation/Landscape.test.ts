@@ -150,4 +150,37 @@ describe("Landscape", () => {
     const stillPresent = landscape.getBlobs().some((b) => b.id === blob.id);
     expect(stillPresent).toBe(false);
   });
+
+  it("fitnessAt with edgeFadeWidth 0 exactly matches the binary isViable boundary", () => {
+    const landscape = makeLandscape();
+    const blob = landscape.getBlobs()[0];
+    expect(landscape.fitnessAt(blob.x, blob.y, 0, 0)).toBe(1); // dead center: viable
+    expect(landscape.fitnessAt(1000, 1000, 0, 0)).toBe(0); // far away: not viable
+  });
+
+  it("fitnessAt ramps from 0 at the threshold up to 1 an edgeFadeWidth above it", () => {
+    const landscape = makeLandscape();
+    const blob = landscape.getBlobs()[0];
+    const fadeWidth = 0.5;
+
+    // Deep inside (dead center), fitness is fully 1 regardless of fade width.
+    expect(landscape.fitnessAt(blob.x, blob.y, 0, fadeWidth)).toBe(1);
+
+    // Just outside the viable region, fitness is 0 even with fading (the
+    // alive/dying boundary — isViable's own threshold — never moves).
+    expect(landscape.isViable(1000, 1000, 0)).toBe(false);
+    expect(landscape.fitnessAt(1000, 1000, 0, fadeWidth)).toBe(0);
+  });
+
+  it("a larger edgeFadeWidth widens the interior throttled band (never increases fitness at a fixed point)", () => {
+    const landscape = makeLandscape();
+    const blob = landscape.getBlobs()[0];
+    // A point partway to the edge, likely inside the fade band for some widths.
+    const probeX = blob.x + blob.radius * 0.95;
+    const probeY = blob.y;
+
+    const narrow = landscape.fitnessAt(probeX, probeY, 0, 0.1);
+    const wide = landscape.fitnessAt(probeX, probeY, 0, 2);
+    expect(wide).toBeLessThanOrEqual(narrow);
+  });
 });

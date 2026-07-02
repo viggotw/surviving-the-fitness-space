@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Simulation } from "../simulation/Simulation";
-import { WORLD_SIZE } from "../simulation/Parameters";
+import { computeWorldBounds } from "../simulation/Parameters";
 import { createIsometricCamera, updateCameraAspect } from "./Camera";
 import { FitnessPlane } from "./FitnessPlane";
 import { OrganismView } from "./OrganismView";
@@ -30,7 +30,8 @@ export class Renderer3D {
     // through rather than a flat color painted by the 3D scene.
     this.scene = new THREE.Scene();
 
-    this.camera = createIsometricCamera(canvas.clientWidth / (canvas.clientHeight || 1) || 1);
+    const initialAspect = canvas.clientWidth / (canvas.clientHeight || 1) || 1;
+    this.camera = createIsometricCamera(initialAspect);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     const key = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -43,7 +44,8 @@ export class Renderer3D {
     key.shadow.camera.bottom = -10;
     this.scene.add(ambient, key);
 
-    this.fitnessPlane = new FitnessPlane(WORLD_SIZE * 2);
+    const initialBounds = computeWorldBounds(initialAspect);
+    this.fitnessPlane = new FitnessPlane(initialBounds.width, initialBounds.height);
     this.scene.add(this.fitnessPlane.mesh);
 
     this.organismView = new OrganismView(maxOrganisms);
@@ -57,7 +59,7 @@ export class Renderer3D {
    * trait-space (x, y) point, by casting the isometric camera's ray onto the
    * infinite ground plane (y = 0) — not just the finite fitness-plane mesh,
    * so a click anywhere on screen resolves to *some* trait-space point, even
-   * one far outside WORLD_SIZE. Returns null only in the degenerate case
+   * one far outside the world's current bounds. Returns null only in the degenerate case
    * where the ray is parallel to the ground (never happens for this fixed,
    * downward-looking camera, but Three.js's API can return null).
    */
@@ -72,11 +74,14 @@ export class Renderer3D {
 
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height, false);
-    updateCameraAspect(this.camera, width / (height || 1) || 1);
+    const aspect = width / (height || 1) || 1;
+    updateCameraAspect(this.camera, aspect);
+    const bounds = computeWorldBounds(aspect);
+    this.fitnessPlane.resize(bounds.width, bounds.height);
   }
 
   sync(simulation: Simulation): void {
-    this.fitnessPlane.update(simulation.getLandscape(), simulation.time);
+    this.fitnessPlane.update(simulation.getLandscape(), simulation.time, simulation.params.edgeFadeWidth);
     this.organismView.sync(simulation.getOrganisms());
   }
 

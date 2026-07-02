@@ -70,7 +70,7 @@ describe("Simulation", () => {
     expect(sim.population).toBe(1);
 
     const before = sim.getOrganisms()[0].radius;
-    sim.update(1);
+    sim.update(0.05);
     expect(sim.population).toBe(1);
     expect(sim.getOrganisms()[0].state).toBe("alive");
     expect(sim.getOrganisms()[0].radius).toBeGreaterThan(before);
