@@ -3,13 +3,16 @@ import { DEFAULT_PARAMETERS, computeWorldBounds } from "../simulation/Parameters
 import { Renderer3D } from "../rendering/Renderer3D";
 import { Controls } from "../ui/Controls";
 import { ExplanationOverlay } from "../ui/ExplanationOverlay";
+import { StatsHud } from "../ui/StatsHud";
 import { Music } from "../audio/Music";
+import { SpawnBudget } from "./SpawnBudget";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 const controlsContainer = document.querySelector<HTMLElement>("#controls");
 const overlayContainer = document.querySelector<HTMLElement>("#overlay");
-if (!canvas || !controlsContainer || !overlayContainer) {
-  throw new Error("index.html is missing a required #scene, #controls, or #overlay element");
+const statsContainer = document.querySelector<HTMLElement>("#stats");
+if (!canvas || !controlsContainer || !overlayContainer || !statsContainer) {
+  throw new Error("index.html is missing a required #scene, #controls, #overlay, or #stats element");
 }
 
 const windowAspect = (): number => window.innerWidth / (window.innerHeight || 1) || 1;
@@ -25,6 +28,8 @@ const controls = new Controls(controlsContainer, simulation, music, () => {
   simulation.seedPopulation(simulation.params.initialOrganisms);
 });
 new ExplanationOverlay(overlayContainer).setVisible(false);
+const statsHud = new StatsHud(statsContainer);
+const spawnBudget = new SpawnBudget();
 
 // Autoplay policies require a user gesture before any audio can play;
 // Music.start() is idempotent, so the very first pointer interaction
@@ -42,9 +47,18 @@ function frame(now: number): void {
   last = now;
 
   simulation.update(dt);
+  spawnBudget.update(dt, simulation.isExtinct, simulation.timeSinceExtinction);
   renderer.sync(simulation);
   renderer.render();
   controls.update();
+  statsHud.update(
+    simulation.burstCount,
+    simulation.deadCount,
+    simulation.runTime,
+    spawnBudget.remaining,
+    simulation.isExtinct,
+    simulation.timeSinceExtinction,
+  );
 
   requestAnimationFrame(frame);
 }
@@ -59,7 +73,9 @@ window.addEventListener("resize", () => {
 // click lands outside the viable region (or outside the world entirely),
 // it just falls away like any other organism would — spawnOrganismAt
 // reuses the exact same creation/lifecycle rules, no special-casing needed.
+// Gated on spawnBudget: a click with no spawns left is simply a no-op.
 canvas.addEventListener("click", (event) => {
+  if (!spawnBudget.tryConsume()) return;
   const rect = canvas.getBoundingClientRect();
   const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;

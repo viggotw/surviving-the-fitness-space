@@ -211,6 +211,12 @@ export class Controls {
       simulation.seedPopulation(this.state.seedCount);
     });
     population
+      // Fades every organism out like any other death, rather than clearing
+      // instantly — a quick way to end the current run before starting a
+      // new one (e.g. by clicking the scene once the population hits zero).
+      .addButton({ title: "Kill all" })
+      .on("click", () => simulation.killAll());
+    population
       .addBinding(this.state, "maxOrganisms", {
         label: "Max population (organisms)",
         ...centeredFromMax(p.maxOrganisms, 1000),

@@ -18,6 +18,15 @@ export class Simulation {
   private nextIdCounter = 1;
   private extinctionTimer = 0;
 
+  // Per-run scoreboard for the HUD — all three read as "how has *this* run
+  // gone": each freezes/holds its value while extinct and resets together
+  // (see beginRunIfEmpty()) the moment a new organism appears in an empty
+  // population (seedPopulation or spawnOrganismAt after extinction), not
+  // just on a full reset().
+  private _burstCount = 0;
+  private _deadCount = 0;
+  private _runTime = 0;
+
   paused = false;
 
   constructor(params: Partial<SimulationParameters> = {}) {
@@ -32,6 +41,10 @@ export class Simulation {
   update(dt: number): void {
     if (this.paused) return;
     this._time += dt;
+    // Checked *before* this tick's removals: runTime still advances through
+    // the tick where the last organism finally dies, then freezes starting
+    // next tick once the population is confirmed empty.
+    if (this.organisms.length > 0) this._runTime += dt;
 
     this.landscape.update(
       dt,
@@ -46,6 +59,7 @@ export class Simulation {
     const offspringBuffer: Organism[] = [];
 
     for (const organism of this.organisms) {
+      const wasAlive = organism.state === "alive";
       const offspring = updateOrganism(
         organism,
         dt,
@@ -58,6 +72,11 @@ export class Simulation {
         this.nextId,
         this.organisms,
       );
+      // Counted on the alive → bursting transition itself (once per
+      // organism, not per tick it stays bursting) — a successful pop,
+      // regardless of how many children actually cleared spawn-placement
+      // and got born. Distinct from dying: a burst is reproduction, not death.
+      if (wasAlive && organism.state === "bursting") this._burstCount++;
       offspringBuffer.push(...offspring);
     }
 
@@ -66,6 +85,13 @@ export class Simulation {
     // to make room, rather than silently truncating newly spawned offspring.
     const newbornIds = new Set(offspringBuffer.map((o) => o.id));
     this.organisms.push(...offspringBuffer);
+
+    // Only count actual deaths (leaving a viable region) toward deadCount —
+    // not organisms removed after successfully bursting (that's reproduction,
+    // not death) or later evicted purely to enforce the population cap.
+    for (const o of this.organisms) {
+      if (o.state === "dying" && isRemovable(o)) this._deadCount++;
+    }
     this.organisms = this.organisms.filter((o) => !isRemovable(o));
 
     const excess = this.organisms.length - this.params.maxOrganisms;
@@ -125,10 +151,28 @@ export class Simulation {
     this.nextIdCounter = 1;
     this.extinctionTimer = 0;
     this.organisms = [];
+    this._burstCount = 0;
+    this._deadCount = 0;
+    this._runTime = 0;
     this.landscape = new Landscape(this.rng, this.params, this.bounds);
   }
 
+  /**
+   * If the population is currently empty, a new run is about to begin —
+   * reset the whole per-run scoreboard (runTime, burstCount, deadCount)
+   * together. Unlike reset(), this happens on every extinction → respawn
+   * cycle, not just on an explicit full reset.
+   */
+  private beginRunIfEmpty(): void {
+    if (this.organisms.length === 0) {
+      this._runTime = 0;
+      this._burstCount = 0;
+      this._deadCount = 0;
+    }
+  }
+
   seedPopulation(count: number): void {
+    this.beginRunIfEmpty();
     const halfW = this.bounds.width / 2;
     const halfH = this.bounds.height / 2;
     for (let i = 0; i < count; i++) {
@@ -157,6 +201,7 @@ export class Simulation {
    * as a burst would.
    */
   spawnOrganismAt(x: number, y: number): void {
+    this.beginRunIfEmpty();
     if (this.organisms.length >= this.params.maxOrganisms) {
       let oldest = this.organisms[0];
       for (const o of this.organisms) {
@@ -165,6 +210,18 @@ export class Simulation {
       this.organisms = this.organisms.filter((o) => o !== oldest);
     }
     this.organisms.push(createOrganism(this.nextId(), x, y, undefined, this.params, this.bounds, this.rng));
+  }
+
+  /**
+   * Marks every organism as dying, so they fade and fall away exactly like
+   * any other death (over `deathFadeDuration`, counted toward deadCount as
+   * usual) rather than vanishing instantly — a quick way to end the current
+   * run, e.g. right before starting a new one.
+   */
+  killAll(): void {
+    for (const o of this.organisms) {
+      if (o.state !== "dying") o.state = "dying";
+    }
   }
 
   setParams(partial: Partial<SimulationParameters>): void {
@@ -199,5 +256,25 @@ export class Simulation {
 
   get isExtinct(): boolean {
     return this.organisms.length === 0;
+  }
+
+  /** Seconds since the population last hit zero; 0 while not extinct. */
+  get timeSinceExtinction(): number {
+    return this.extinctionTimer;
+  }
+
+  /** Total organisms that have successfully burst (popped into offspring) this run — not organisms merely created, and not organisms that died instead. Resets together with deadCount/runTime, see beginRunIfEmpty(). */
+  get burstCount(): number {
+    return this._burstCount;
+  }
+
+  /** Total organisms that died from leaving a viable region this run (not from bursting, not from population-cap eviction). Resets together with burstCount/runTime, see beginRunIfEmpty(). */
+  get deadCount(): number {
+    return this._deadCount;
+  }
+
+  /** Seconds the *current* run has lasted: frozen while extinct, restarted from 0 the moment a new organism appears in an empty population. */
+  get runTime(): number {
+    return this._runTime;
   }
 }

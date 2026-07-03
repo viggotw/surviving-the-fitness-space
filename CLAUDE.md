@@ -101,10 +101,27 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     lineages tracking the landscape — keep this local-first behavior if touching this logic.
     `Simulation`'s public surface
     (`getOrganisms()`, `getLandscape()`, `params`, `update()`, `setParams()`, `seedPopulation()`,
-    `spawnOrganismAt(x, y)`, `reset()`, `paused`) is the only thing rendering/UI code may touch.
+    `spawnOrganismAt(x, y)`, `killAll()`, `reset()`, `paused`, `burstCount`, `deadCount`, `runTime`,
+    `timeSinceExtinction`) is the only thing rendering/UI code may touch.
     `spawnOrganismAt` is `seedPopulation`'s single-point counterpart (e.g. for click-to-spawn): it
     always honors the request, displacing the oldest organism to make room at the population cap
-    rather than silently no-oping.
+    rather than silently no-oping. `killAll()` marks every organism `dying` rather than clearing
+    the array outright, so they fade away through the same removal path (and get counted toward
+    `deadCount`) as any other death, just all at once — a quick way to end the current run.
+    `burstCount`, `deadCount`, and `runTime` together form a per-run scoreboard: all three read as
+    "how has *this* run gone", so all three reset together (see `beginRunIfEmpty()`) the moment a
+    new organism appears in an empty population (via `seedPopulation` or `spawnOrganismAt`), not
+    just on a full `reset()`. `burstCount` is incremented once per organism on its
+    `alive → bursting` transition (checked by comparing state before/after each `updateOrganism()`
+    call, not by counting offspring) — a successful pop, regardless of how many children actually
+    cleared spawn-placement and got born; staying `bursting` for further ticks while it fades out
+    doesn't double-count it. `deadCount` only counts organisms whose `state` was `dying` at
+    removal — not `bursting` (that's reproduction, not death) and not organisms evicted purely to
+    enforce `maxOrganisms`. `runTime` freezes the instant the population hits zero and restarts
+    from 0 on that same next-spawn trigger. `timeSinceExtinction` (a thin getter over the
+    pre-existing `extinctionTimer`, also used to gate `autoReseedOnExtinction`) is what `StatsHud`
+    uses to delay the "click to add a ball" prompt's fade-in, and what `SpawnBudget` (see
+    `src/app/`) uses to time its post-extinction refill.
 
 - `src/rendering/` — Three.js. Reads simulation state every frame via `Renderer3D.sync(simulation)`
   but never advances simulation time itself.
@@ -127,18 +144,56 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
 
 - `src/ui/` — `Controls.ts` is a Tweakpane dev panel grouped into folders (Environment / Organisms
   / Population) so it's clear what governs the drifting viable regions vs. individual organism
-  behavior vs. overall population bookkeeping. `Presets.ts` and `ExplanationOverlay.ts` are
+  behavior vs. overall population bookkeeping. Global transport controls (Play/Pause, Mute, Reset)
+  sit at the top of the panel, outside any folder. `Presets.ts` and `ExplanationOverlay.ts` are
   currently stubs (only a `Default` preset; overlay hidden with no content) — the full preset set
-  and explanation-mode captions are deferred.
+  and explanation-mode captions are deferred. `StatsHud.ts` is a separate, much smaller display
+  (the `#stats` element, top-center, outside the Tweakpane panel entirely, its text centered): a
+  read-only burst/dead/runTime/spawnsLeft readout, plus a second line below it — a large, glowing,
+  slow-fading "Click somewhere to add a ball" prompt meant to dominate the top of the screen and
+  read as emerging out of mist (big `clamp()`-sized text, `text-shadow` glow, and a `blur()` →
+  sharp `filter` transition alongside the opacity fade). Hidden (`opacity: 0`, blurred) until
+  `timeSinceExtinction` clears `PROMPT_DELAY_SECONDS`, then fades in over
+  `PROMPT_FADE_DURATION_SECONDS`. The fade's `transition` is set from `StatsHud.ts`'s constructor
+  (not `index.html`'s static CSS) specifically so `PROMPT_FADE_COMPLETE_SECONDS` (delay + duration,
+  exported from this file) is one single source of truth shared with `SpawnBudget`, rather than
+  two independently-tuned durations that could drift out of sync — `index.html` only sets the
+  non-timing base styles (font size/color/glow/initial hidden blur). Deliberately its own top-level
+  element rather than living inside Controls, since it's meant to always be visible, not tucked
+  behind the collapsed panel.
+
+- `src/audio/Music.ts` — a generative ambient pad synthesized with the Web Audio API; there's no
+  bundled audio asset in this project, so nothing is loaded or fetched. `start()` lazily builds the
+  audio graph (a handful of detuned oscillators through a slowly-swept lowpass filter) and is
+  idempotent/safe to call repeatedly — browsers block audio until a user gesture, so `main.ts`
+  calls it from a one-time `window` `pointerdown` listener rather than tying it to any specific UI
+  element. `setMuted()` only touches the master gain node (via `setTargetAtTime` for a click-free
+  fade, not an instant cut) — it never stops/restarts the oscillators, so unmuting resumes the
+  same continuously-evolving texture rather than starting over.
+
+- `src/app/SpawnBudget.ts` — a limited, regenerating resource (`MAX_SPAWNS`, default 3) gating how
+  many times the player can click-to-spawn. A pacing/game mechanic layered on top of the
+  simulation, not part of the natural-selection model itself — that's why it lives here in
+  `src/app/` next to the orchestration code rather than in `src/simulation/` (which is otherwise
+  the only directory Vitest covers; this file is manually verified in the browser instead, same as
+  the rest of the UI/app layer). Regenerates one every `REGEN_INTERVAL_SECONDS` (30s) while the
+  population isn't extinct, capped at `MAX_SPAWNS`; refilled to full the moment
+  `timeSinceExtinction` clears `PROMPT_FADE_COMPLETE_SECONDS` (imported from `StatsHud.ts`) — not
+  the instant extinction happens, and not tied to whether/when the player next spawns.
+  `tryConsume()` is the only way to spend a spawn; it's a no-op returning `false` at zero, which is
+  exactly what `main.ts`'s click handler checks to block spawning when the budget is empty.
 
 - `src/app/main.ts` — the only place the per-frame loop is wired:
-  `simulation.update(dt) → renderer.sync(simulation) → renderer.render()`, with `dt` clamped to
-  `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus. Also wires the
-  click-to-spawn interaction: a click on `#scene` is converted to NDC, raycast to a trait-space
-  point via `Renderer3D.raycastToTraitSpace`, then handed to `Simulation.spawnOrganismAt(x, y)` —
-  no special-casing for out-of-bounds/non-viable clicks, since `spawnOrganismAt` is just
-  `createOrganism` + `push`, so the same lifecycle rules that make any other out-of-bounds/
-  non-viable organism fall away apply automatically.
+  `simulation.update(dt) → spawnBudget.update(dt, ...) → renderer.sync(simulation) →
+  renderer.render() → controls.update() → statsHud.update(...)`, with `dt` clamped to `1/20` so a
+  backgrounded tab doesn't cause a simulation spiral on refocus. Also wires the click-to-spawn
+  interaction: a click on `#scene` first calls `spawnBudget.tryConsume()` (returning early, doing
+  nothing, if the budget is empty) and only then is converted to NDC, raycast to a trait-space
+  point via `Renderer3D.raycastToTraitSpace`, and handed to `Simulation.spawnOrganismAt(x, y)` — no
+  special-casing for out-of-bounds/non-viable clicks beyond that budget check, since
+  `spawnOrganismAt` is just `createOrganism` + `push`, so the same lifecycle rules that make any
+  other out-of-bounds/non-viable organism fall away apply automatically. This same click path is
+  what restarts `runTime`/`burstCount`/`deadCount` after an extinction (see `Simulation.ts` above).
 
 ## Known workarounds
 
