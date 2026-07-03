@@ -1,5 +1,6 @@
 import { Pane } from "tweakpane";
 import type { Simulation } from "../simulation/Simulation";
+import type { Music } from "../audio/Music";
 import { MIN_BIRTH_RADIUS, MIN_BURST_RADIUS, MIN_GROWTH_RATE, WORLD_SIZE } from "../simulation/Parameters";
 
 /**
@@ -26,6 +27,7 @@ function centeredFromMax(value: number, max: number): { min: number; max: number
 
 interface ControlsState {
   playing: boolean;
+  muted: boolean;
   seedCount: number;
   environmentDriftSpeed: number;
   environmentDeformationSpeed: number;
@@ -58,13 +60,14 @@ export class Controls {
   private readonly state: ControlsState;
   private readonly simulation: Simulation;
 
-  constructor(container: HTMLElement, simulation: Simulation, onReset: () => void) {
+  constructor(container: HTMLElement, simulation: Simulation, music: Music, onReset: () => void) {
     this.simulation = simulation;
     this.pane = new Pane({ container, title: "Controls", expanded: false });
     const p = simulation.params;
 
     this.state = {
       playing: !simulation.paused,
+      muted: music.isMuted,
       seedCount: p.initialOrganisms,
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
@@ -88,6 +91,9 @@ export class Controls {
       .on("change", (ev) => {
         simulation.paused = !ev.value;
       });
+    this.pane
+      .addBinding(this.state, "muted", { label: "Mute" })
+      .on("change", (ev) => music.setMuted(ev.value));
     this.pane.addButton({ title: "Reset" }).on("click", () => onReset());
 
     // Environment: governs the moving/deforming viable regions (the "lava-lamp" pattern).

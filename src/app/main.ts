@@ -3,6 +3,7 @@ import { DEFAULT_PARAMETERS, computeWorldBounds } from "../simulation/Parameters
 import { Renderer3D } from "../rendering/Renderer3D";
 import { Controls } from "../ui/Controls";
 import { ExplanationOverlay } from "../ui/ExplanationOverlay";
+import { Music } from "../audio/Music";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 const controlsContainer = document.querySelector<HTMLElement>("#controls");
@@ -18,11 +19,17 @@ simulation.setBounds(computeWorldBounds(windowAspect()));
 simulation.seedPopulation(simulation.params.initialOrganisms);
 
 const renderer = new Renderer3D(canvas, simulation.params.maxOrganisms);
-const controls = new Controls(controlsContainer, simulation, () => {
+const music = new Music();
+const controls = new Controls(controlsContainer, simulation, music, () => {
   simulation.reset();
   simulation.seedPopulation(simulation.params.initialOrganisms);
 });
 new ExplanationOverlay(overlayContainer).setVisible(false);
+
+// Autoplay policies require a user gesture before any audio can play;
+// Music.start() is idempotent, so the very first pointer interaction
+// anywhere on the page is enough to kick it off.
+window.addEventListener("pointerdown", () => music.start(), { once: true });
 
 // Clamp dt so a backgrounded/refocused tab doesn't cause a simulation spiral.
 const MAX_DT = 1 / 20;
