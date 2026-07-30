@@ -4,6 +4,18 @@ import { createOrganism, updateOrganism, isRemovable, type Organism } from "./Or
 import { DEFAULT_PARAMETERS, WORLD_SIZE, clampParameters, type SimulationParameters } from "./Parameters";
 
 /**
+ * Largest `dt` any single simulation step is allowed to take, so a fast
+ * `timeScale` adds *more* steps per frame rather than coarser ones — growth,
+ * bursting, blob drift and the metaball field all stay as accurate at 10× as
+ * they are at 1×. Matches the frame-loop clamp in `main.ts`.
+ */
+const MAX_SUBSTEP_DT = 1 / 20;
+/** Hard ceiling on sub-steps per `update()` call, so a huge `dt` can't stall a frame. */
+const MAX_SUBSTEPS = 16;
+/** Ceiling on `timeScale`; the Controls panel builds its slider range from this. */
+export const MAX_TIME_SCALE = 10;
+
+/**
  * Owns the fitness landscape and the full organism population, and steps them
  * forward asynchronously by delta time. Contains no rendering or DOM concerns.
  */
@@ -31,11 +43,14 @@ export class Simulation {
   // started bursting/dying *this* update() call specifically, not a running
   // total. Overwritten (not accumulated) at the top of every update(), so a
   // caller must read them right after calling update() to see this tick's
-  // events before the next tick clears them.
+  // events before the next tick clears them. They do accumulate across the
+  // sub-steps *within* one update() call, so a fast timeScale reports every
+  // event it simulated rather than only the last sub-step's.
   private _burstsThisTick = 0;
   private _fallsThisTick = 0;
 
   paused = false;
+  private _timeScale = 1;
 
   constructor(params: Partial<SimulationParameters> = {}) {
     this.params = { ...DEFAULT_PARAMETERS, ...clampParameters(params) };
@@ -46,6 +61,29 @@ export class Simulation {
 
   private nextId = (): number => this.nextIdCounter++;
 
+  /**
+   * Playback speed multiplier applied to every `update(dt)`, clamped to
+   * `[0, MAX_TIME_SCALE]`. Transport, not biology: it scales how fast the whole
+   * run is watched, not how any part of the model behaves relative to any
+   * other, so nothing about the emergent dynamics changes with it — unlike the
+   * environment sliders in `params`. 0 is equivalent to `paused`.
+   */
+  get timeScale(): number {
+    return this._timeScale;
+  }
+
+  set timeScale(value: number) {
+    this._timeScale = Math.max(0, Math.min(MAX_TIME_SCALE, value));
+  }
+
+  /**
+   * Advances the run by `dt * timeScale`, split into however many sub-steps of
+   * at most `MAX_SUBSTEP_DT` that takes. Sub-stepping (rather than handing the
+   * whole scaled `dt` to one step) is what makes a fast `timeScale` a pure
+   * fast-forward: every step is the same size it would be at 1×, so organisms
+   * can't grow straight past their burst radius or blobs jump across the field
+   * in a single tick.
+   */
   update(dt: number): void {
     // Reset before the pause check: otherwise a paused tick would leave the
     // previous tick's events visible indefinitely, re-triggering the same
@@ -53,6 +91,15 @@ export class Simulation {
     this._burstsThisTick = 0;
     this._fallsThisTick = 0;
     if (this.paused) return;
+
+    const scaled = dt * this._timeScale;
+    if (scaled <= 0) return;
+    const steps = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(scaled / MAX_SUBSTEP_DT)));
+    const stepDt = scaled / steps;
+    for (let i = 0; i < steps; i++) this.step(stepDt);
+  }
+
+  private step(dt: number): void {
     this._time += dt;
     // Checked *before* this tick's removals: runTime still advances through
     // the tick where the last organism finally dies, then freezes starting

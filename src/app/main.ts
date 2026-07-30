@@ -47,7 +47,11 @@ function frame(now: number): void {
   last = now;
 
   simulation.update(dt);
-  spawnBudget.update(dt, simulation.isExtinct, simulation.timeSinceExtinction);
+  // Scaled by timeScale to keep pace with the run: SpawnBudget's other timing
+  // input (timeSinceExtinction) is simulation time, so feeding it unscaled
+  // wall-clock dt would have its two clocks disagree about how long 30s is the
+  // moment the speed control leaves 1×.
+  spawnBudget.update(dt * simulation.timeScale, simulation.isExtinct, simulation.timeSinceExtinction);
   music.updateEnvironment(simulation.getLandscape().getEnvironmentStats(simulation.time), simulation.params.viabilityBlobRadiusMax);
   for (let i = 0; i < simulation.burstsThisTick; i++) music.playPop(simulation.population);
   for (let i = 0; i < simulation.fallsThisTick; i++) music.playFall(simulation.population);

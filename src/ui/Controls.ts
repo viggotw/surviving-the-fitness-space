@@ -1,4 +1,5 @@
 import { Pane } from "tweakpane";
+import { MAX_TIME_SCALE } from "../simulation/Simulation";
 import type { Simulation } from "../simulation/Simulation";
 import type { Music } from "../audio/Music";
 import { MIN_BIRTH_RADIUS, MIN_BURST_RADIUS, MIN_GROWTH_RATE, WORLD_SIZE } from "../simulation/Parameters";
@@ -27,6 +28,8 @@ function centeredFromMax(value: number, max: number): { min: number; max: number
 
 interface ControlsState {
   playing: boolean;
+  /** Playback speed multiplier — transport, not a simulation parameter. See `Simulation.timeScale`. */
+  timeScale: number;
   /** Checked = sound on (the inverse of Music's own `isMuted`) — reads naturally as a toggle rather than a double negative. */
   soundOn: boolean;
   musicVolume: number;
@@ -71,6 +74,7 @@ export class Controls {
 
     this.state = {
       playing: !simulation.paused,
+      timeScale: simulation.timeScale,
       soundOn: !music.isMuted,
       musicVolume: music.musicVolumeValue,
       popVolume: music.popVolumeValue,
@@ -97,6 +101,22 @@ export class Controls {
       .addBinding(this.state, "playing", { label: "Play / Pause" })
       .on("change", (ev) => {
         simulation.paused = !ev.value;
+      });
+    // Fast-forward, not a tuning knob: it changes how quickly the run is
+    // watched without changing any part of the model relative to any other, so
+    // it belongs up here with Play/Pause rather than in the Environment folder
+    // next to the sliders that do alter the dynamics. Starts at the left of its
+    // range rather than centered like the parameter sliders below — 1× is real
+    // time, and there's no such thing as watching a run slower than that here.
+    this.pane
+      .addBinding(this.state, "timeScale", {
+        label: "Speed (×)",
+        min: 1,
+        max: MAX_TIME_SCALE,
+        step: 0.5,
+      })
+      .on("change", (ev) => {
+        simulation.timeScale = ev.value;
       });
     this.pane
       .addBinding(this.state, "soundOn", { label: "Sound" })

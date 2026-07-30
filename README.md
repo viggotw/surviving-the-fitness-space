@@ -58,8 +58,14 @@ hundreds doesn't turn into a wall of clicks. Turn it off from the Controls panel
 Every slider's range is centered on its default — the lever sits in the middle of the track
 out of the box, left of center is slower/smaller, right of center is faster/bigger.
 
-Play/Pause, Sound, and Reset sit at the top of the panel, outside any folder — Sound is checked
-when audio is on (not a "Mute" checkbox you have to double-negative your way through).
+Play/Pause, Speed, Sound, and Reset sit at the top of the panel, outside any folder — Sound is
+checked when audio is on (not a "Mute" checkbox you have to double-negative your way through).
+
+**Speed (1×–10×)** fast-forwards the run so you can watch minutes of drift and turnover in seconds.
+It's a pure fast-forward: the simulation takes proportionally more steps per frame rather than
+bigger ones, so a run at 10× unfolds exactly as it would at 1×, just sooner. Nothing about the
+model changes with it — unlike the Environment and Organisms sliders, which alter the dynamics
+themselves.
 
 **Environment** — governs the slow-moving, deforming viable regions (the "lava-lamp" pattern):
 

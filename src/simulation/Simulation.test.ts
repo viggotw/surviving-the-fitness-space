@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Simulation } from "./Simulation";
+import { MAX_TIME_SCALE, Simulation } from "./Simulation";
 import { WORLD_SIZE } from "./Parameters";
 
 describe("Simulation", () => {
@@ -26,6 +26,64 @@ describe("Simulation", () => {
     sim.update(0.6);
     expect(sim.isExtinct).toBe(false);
     expect(sim.population).toBeGreaterThan(0);
+  });
+
+  it("timeScale fast-forwards the run without changing it: 10x for one tick == 1x for ten", () => {
+    const fast = new Simulation({ seed: 11 });
+    const slow = new Simulation({ seed: 11 });
+    fast.seedPopulation(8);
+    slow.seedPopulation(8);
+    expect(fast.population).toBe(8); // guard: identical, non-empty starting states
+    expect(slow.population).toBe(8);
+    fast.timeScale = 10;
+
+    // One 1/20s frame at 10x has to land on exactly the same state as ten
+    // 1/20s frames at 1x — same sub-step size, same number of sub-steps.
+    fast.update(1 / 20);
+    for (let i = 0; i < 10; i++) slow.update(1 / 20);
+
+    expect(fast.time).toBeCloseTo(slow.time, 10);
+    expect(fast.population).toBe(slow.population);
+    expect(fast.burstCount).toBe(slow.burstCount);
+    expect(fast.deadCount).toBe(slow.deadCount);
+    expect(fast.getOrganisms().map((o) => o.radius)).toEqual(slow.getOrganisms().map((o) => o.radius));
+  });
+
+  it("timeScale accumulates burst/fall events across its sub-steps instead of reporting only the last", () => {
+    // growthStartDelayMax 0 so the whole seed cohort is actually growing (and
+    // so popping) inside the half-second of simulation time below.
+    const params = { seed: 12, growthRate: 5, burstRadius: 0.12, growthStartDelayMax: 0 };
+    const fast = new Simulation(params);
+    const slow = new Simulation(params);
+    fast.seedPopulation(40);
+    slow.seedPopulation(40);
+    fast.timeScale = 10;
+
+    fast.update(1 / 20);
+    let slowBursts = 0;
+    let slowFalls = 0;
+    for (let i = 0; i < 10; i++) {
+      slow.update(1 / 20);
+      slowBursts += slow.burstsThisTick;
+      slowFalls += slow.fallsThisTick;
+    }
+
+    expect(slowBursts).toBeGreaterThan(0); // guard: the fixture actually pops
+    expect(fast.burstsThisTick).toBe(slowBursts);
+    expect(fast.fallsThisTick).toBe(slowFalls);
+  });
+
+  it("timeScale is clamped to a sane range, and 0 freezes the run like pause", () => {
+    const sim = new Simulation({ seed: 13 });
+    sim.seedPopulation(5);
+
+    sim.timeScale = -5;
+    expect(sim.timeScale).toBe(0);
+    sim.update(1 / 20);
+    expect(sim.time).toBe(0); // 0 advances nothing at all
+
+    sim.timeScale = 1000;
+    expect(sim.timeScale).toBe(MAX_TIME_SCALE);
   });
 
   it("never exceeds maxOrganisms even with many simultaneous bursts", () => {

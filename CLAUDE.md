@@ -124,9 +124,17 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     lineages tracking the landscape — keep this local-first behavior if touching this logic.
     `Simulation`'s public surface
     (`getOrganisms()`, `getLandscape()`, `params`, `update()`, `setParams()`, `seedPopulation()`,
-    `spawnOrganismAt(x, y)`, `killAll()`, `reset()`, `paused`, `burstCount`, `deadCount`, `runTime`,
-    `timeSinceExtinction`, `burstsThisTick`, `fallsThisTick`) is the only thing rendering/UI code
-    may touch.
+    `spawnOrganismAt(x, y)`, `killAll()`, `reset()`, `paused`, `timeScale`, `burstCount`,
+    `deadCount`, `runTime`, `timeSinceExtinction`, `burstsThisTick`, `fallsThisTick`) is the only
+    thing rendering/UI code may touch.
+    `timeScale` (clamped to `[0, MAX_TIME_SCALE]`, default 1) is transport rather than biology — it
+    scales how fast the run is *watched*, not how any part of the model behaves relative to any
+    other, so it belongs next to `paused` and not in `params`. `update(dt)` advances
+    `dt * timeScale` as however many sub-steps of at most `MAX_SUBSTEP_DT` that takes, rather than
+    handing one big `dt` to a single step: that's what makes a fast scale a true fast-forward
+    (10× for one tick is bit-for-bit identical to 1× for ten) instead of coarsening every tick until
+    organisms grow straight past their burst radius. `burstsThisTick`/`fallsThisTick` accumulate
+    across those sub-steps, so a caller still hears every event that was simulated.
     `spawnOrganismAt` is `seedPopulation`'s single-point counterpart (e.g. for click-to-spawn): it
     always honors the request, displacing the oldest organism to make room at the population cap
     rather than silently no-oping. `killAll()` marks every organism `dying` rather than clearing
@@ -175,7 +183,10 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
 - `src/ui/` — `Controls.ts` is a Tweakpane dev panel grouped into folders (Environment / Organisms
   / Population / Audio) so it's clear what governs the drifting viable regions vs. individual
   organism behavior vs. overall population bookkeeping vs. sound. Global transport controls
-  (Play/Pause, Sound, Reset) sit at the top of the panel, outside any folder — "Sound" (not "Mute")
+  (Play/Pause, Speed, Sound, Reset) sit at the top of the panel, outside any folder — Speed is up
+  there with Play/Pause because it's playback (`Simulation.timeScale`), not a tuning knob that
+  changes the dynamics like the Environment sliders do; it's also the one slider deliberately *not*
+  centered on its default, since 1× is real time and there's nothing slower to offer. "Sound" (not "Mute")
   is deliberately phrased so *checked* means sound is on, avoiding a double-negative checkbox;
   internally it's still `Music.setMuted(!ev.value)`, only the UI-facing sense is inverted. The
   "Audio (temporary)" folder (music/pop/fall volume sliders, each wired straight to
@@ -260,8 +271,12 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   `simulation.update(dt) → spawnBudget.update(dt, ...) → music.updateEnvironment(...) →
   music.playPop()/playFall() (once per Simulation.burstsThisTick/fallsThisTick) →
   renderer.sync(simulation) → renderer.render() → controls.update() → statsHud.update(...)`, with
-  `dt` clamped to `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus. Also
-  wires the click-to-spawn
+  `dt` clamped to `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus (the
+  `Simulation.timeScale` multiplier is applied *inside* `update()`, after that clamp, as extra
+  sub-steps — the frame loop itself stays one `update()` call per frame). `SpawnBudget` is fed
+  `dt * simulation.timeScale` rather than raw `dt`, since its other timing input
+  (`timeSinceExtinction`) is simulation time and the two would otherwise disagree about how long
+  30s is at any speed but 1×. Also wires the click-to-spawn
   interaction: a click on `#scene` first calls `spawnBudget.tryConsume()` (returning early, doing
   nothing, if the budget is empty) and only then is converted to NDC, raycast to a trait-space
   point via `Renderer3D.raycastToTraitSpace`, and handed to `Simulation.spawnOrganismAt(x, y)` — no
