@@ -27,7 +27,11 @@ function centeredFromMax(value: number, max: number): { min: number; max: number
 
 interface ControlsState {
   playing: boolean;
-  muted: boolean;
+  /** Checked = sound on (the inverse of Music's own `isMuted`) — reads naturally as a toggle rather than a double negative. */
+  soundOn: boolean;
+  musicVolume: number;
+  popVolume: number;
+  fallVolume: number;
   seedCount: number;
   environmentDriftSpeed: number;
   environmentDeformationSpeed: number;
@@ -67,7 +71,10 @@ export class Controls {
 
     this.state = {
       playing: !simulation.paused,
-      muted: music.isMuted,
+      soundOn: !music.isMuted,
+      musicVolume: music.musicVolumeValue,
+      popVolume: music.popVolumeValue,
+      fallVolume: music.fallVolumeValue,
       seedCount: p.initialOrganisms,
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
@@ -92,8 +99,8 @@ export class Controls {
         simulation.paused = !ev.value;
       });
     this.pane
-      .addBinding(this.state, "muted", { label: "Mute" })
-      .on("change", (ev) => music.setMuted(ev.value));
+      .addBinding(this.state, "soundOn", { label: "Sound" })
+      .on("change", (ev) => music.setMuted(!ev.value));
     this.pane.addButton({ title: "Reset" }).on("click", () => onReset());
 
     // Environment: governs the moving/deforming viable regions (the "lava-lamp" pattern).
@@ -233,6 +240,20 @@ export class Controls {
     population
       .addBinding(this.state, "autoReseedOnExtinction", { label: "Auto-reseed on extinction" })
       .on("change", (ev) => simulation.setParams({ autoReseedOnExtinction: ev.value }));
+
+    // Audio: temporary, per-bus tuning while the mix is still being found —
+    // meant to collapse into a single "Effects" on/off checkbox later, once
+    // the levels below are settled.
+    const audio = this.pane.addFolder({ title: "Audio (temporary)", expanded: false });
+    audio
+      .addBinding(this.state, "musicVolume", { label: "Music volume", min: 0, max: 0.3, step: 0.005 })
+      .on("change", (ev) => music.setMusicVolume(ev.value));
+    audio
+      .addBinding(this.state, "popVolume", { label: "Pop volume", min: 0, max: 0.3, step: 0.005 })
+      .on("change", (ev) => music.setPopVolume(ev.value));
+    audio
+      .addBinding(this.state, "fallVolume", { label: "Fall volume", min: 0, max: 0.3, step: 0.005 })
+      .on("change", (ev) => music.setFallVolume(ev.value));
   }
 
   /** Call once per frame (or on a light throttle) to keep the read-only population monitor live. */
