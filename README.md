@@ -45,14 +45,21 @@ ball" prompt slowly fades into view at the top of the screen — like it's emerg
 and disappears the instant it isn't extinct anymore.
 
 A generative ambient soundtrack (synthesized in the browser — no audio file to load) starts on
-your first click or tap anywhere on the page; mute it from the Controls panel at any time.
+your first click or tap anywhere on the page: an organ-like, reverb-drenched open chord meant to
+feel grand and a little eternal, that continuously reflects the current viable regions — more/
+bigger shapes open up the tone and add fullness, bigger shapes in particular pull the pitch down
+into something deeper. Organisms bursting and falling each get their own very quiet
+sound effect too, both capped so a cluster of many at once still reads as a soft shimmer rather
+than noise, and both fading out further still as the population grows past a few dozen so a run of
+hundreds doesn't turn into a wall of clicks. Turn it off from the Controls panel at any time.
 
 ## Controls panel
 
 Every slider's range is centered on its default — the lever sits in the middle of the track
 out of the box, left of center is slower/smaller, right of center is faster/bigger.
 
-Play/Pause, Mute, and Reset sit at the top of the panel, outside any folder.
+Play/Pause, Sound, and Reset sit at the top of the panel, outside any folder — Sound is checked
+when audio is on (not a "Mute" checkbox you have to double-negative your way through).
 
 **Environment** — governs the slow-moving, deforming viable regions (the "lava-lamp" pattern):
 
@@ -88,6 +95,15 @@ to the exact same size before bursting, not a per-organism trait:
 | Max population | hard cap; the oldest organisms are displaced to make room for new offspring |
 | Population | live organism count (read-only) |
 | Auto-reseed on extinction | if enabled, automatically reseeds the population after it dies out |
+
+**Audio (temporary)** — per-sound volume, for tuning the mix live. This folder is a stand-in for a
+single future "Effects" on/off checkbox, not a permanent set of controls:
+
+| Control | Unit |
+|---|---|
+| Music volume | gain of the ambient pad |
+| Pop volume | gain of the (very quiet) organism-bursting sound effect |
+| Fall volume | gain of the (very quiet) organism-falling sound effect |
 
 ## Project status
 
