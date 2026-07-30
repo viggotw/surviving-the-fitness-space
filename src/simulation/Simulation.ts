@@ -27,6 +27,14 @@ export class Simulation {
   private _deadCount = 0;
   private _runTime = 0;
 
+  // Transient, per-tick event counts for sound effects — how many organisms
+  // started bursting/dying *this* update() call specifically, not a running
+  // total. Overwritten (not accumulated) at the top of every update(), so a
+  // caller must read them right after calling update() to see this tick's
+  // events before the next tick clears them.
+  private _burstsThisTick = 0;
+  private _fallsThisTick = 0;
+
   paused = false;
 
   constructor(params: Partial<SimulationParameters> = {}) {
@@ -39,6 +47,11 @@ export class Simulation {
   private nextId = (): number => this.nextIdCounter++;
 
   update(dt: number): void {
+    // Reset before the pause check: otherwise a paused tick would leave the
+    // previous tick's events visible indefinitely, re-triggering the same
+    // sound effects every frame while paused.
+    this._burstsThisTick = 0;
+    this._fallsThisTick = 0;
     if (this.paused) return;
     this._time += dt;
     // Checked *before* this tick's removals: runTime still advances through
@@ -72,11 +85,18 @@ export class Simulation {
         this.nextId,
         this.organisms,
       );
-      // Counted on the alive → bursting transition itself (once per
-      // organism, not per tick it stays bursting) — a successful pop,
+      // Counted on the alive → bursting/dying transition itself (once per
+      // organism, not every tick it stays in that state) — a successful pop,
       // regardless of how many children actually cleared spawn-placement
       // and got born. Distinct from dying: a burst is reproduction, not death.
-      if (wasAlive && organism.state === "bursting") this._burstCount++;
+      if (wasAlive && organism.state === "bursting") {
+        this._burstCount++;
+        this._burstsThisTick++;
+      }
+      // "Falls" here means *starting* to fall (leaving a viable region), the
+      // same instant the fall animation begins — not the eventual removal
+      // deadCount tracks below, which happens only once the fade completes.
+      if (wasAlive && organism.state === "dying") this._fallsThisTick++;
       offspringBuffer.push(...offspring);
     }
 
@@ -276,5 +296,15 @@ export class Simulation {
   /** Seconds the *current* run has lasted: frozen while extinct, restarted from 0 the moment a new organism appears in an empty population. */
   get runTime(): number {
     return this._runTime;
+  }
+
+  /** How many organisms started bursting on the most recent update() call — for sound effects. Overwritten every tick; read it right after calling update(). */
+  get burstsThisTick(): number {
+    return this._burstsThisTick;
+  }
+
+  /** How many organisms started falling (leaving a viable region) on the most recent update() call — for sound effects. Overwritten every tick; read it right after calling update(). */
+  get fallsThisTick(): number {
+    return this._fallsThisTick;
   }
 }

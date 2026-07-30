@@ -251,4 +251,66 @@ describe("Simulation", () => {
     expect(sim.population).toBe(0);
     expect(sim.deadCount).toBe(2);
   });
+
+  it("burstsThisTick/fallsThisTick reflect only the most recent tick's events, for sound effects", () => {
+    const sim = new Simulation({
+      seed: 14,
+      initialOrganisms: 0,
+      birthRadius: 0.01,
+      burstRadius: 0.1,
+      growthRate: 20,
+      growthStartDelayMax: 0,
+      spawnClearanceFactor: 0,
+    });
+    expect(sim.burstsThisTick).toBe(0);
+    expect(sim.fallsThisTick).toBe(0);
+
+    const blob = sim.getLandscape().getBlobs()[0];
+    sim.spawnOrganismAt(blob.x, blob.y); // will burst
+
+    // A point *within* world bounds but outside every blob: createOrganism
+    // only rejects out-of-bounds positions at creation, so this organism
+    // starts "alive" and only transitions to "dying" once isViable() fails
+    // on its first tick — the actual alive → dying path fallsThisTick
+    // tracks (unlike a click far outside the world entirely, which is
+    // already "dying" the instant it's created, never having been "alive").
+    let fallX = 5;
+    let fallY = 5;
+    while (sim.getLandscape().isViable(fallX, fallY, 0)) fallY -= 0.1;
+    sim.spawnOrganismAt(fallX, fallY);
+
+    sim.update(0.05);
+    expect(sim.burstsThisTick).toBe(1);
+    expect(sim.fallsThisTick).toBe(1);
+
+    // Neither original organism transitions again (one is now "bursting",
+    // the other "dying") — the counts must not carry over or double-count.
+    // A zero-length tick changes no organism's state, isolating that
+    // property from the fact that a *real* tick would also cause this
+    // burst's own children (birthRadius well under burstRadius, but
+    // growthRate this extreme) to instantly mature and burst themselves.
+    sim.update(0);
+    expect(sim.burstsThisTick).toBe(0);
+    expect(sim.fallsThisTick).toBe(0);
+  });
+
+  it("burstsThisTick/fallsThisTick reset even on a paused tick, rather than leaking the previous tick's counts", () => {
+    const sim = new Simulation({
+      seed: 15,
+      initialOrganisms: 0,
+      birthRadius: 0.01,
+      burstRadius: 0.1,
+      growthRate: 20,
+      growthStartDelayMax: 0,
+      spawnClearanceFactor: 0,
+    });
+    const blob = sim.getLandscape().getBlobs()[0];
+    sim.spawnOrganismAt(blob.x, blob.y);
+    sim.update(0.05);
+    expect(sim.burstsThisTick).toBe(1);
+
+    sim.paused = true;
+    sim.update(0.05);
+    expect(sim.burstsThisTick).toBe(0);
+  });
 });
