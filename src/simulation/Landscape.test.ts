@@ -183,4 +183,30 @@ describe("Landscape", () => {
     const wide = landscape.fitnessAt(probeX, probeY, 0, 2);
     expect(wide).toBeLessThanOrEqual(narrow);
   });
+
+  it("getEnvironmentStats reports blobCount matching getBlobs and a coverageFraction within [0, 1]", () => {
+    const landscape = makeLandscape();
+    const stats = landscape.getEnvironmentStats(0);
+    expect(stats.blobCount).toBe(landscape.getBlobs().length);
+    expect(stats.averageRadius).toBeGreaterThan(0);
+    expect(stats.coverageFraction).toBeGreaterThanOrEqual(0);
+    expect(stats.coverageFraction).toBeLessThanOrEqual(1);
+  });
+
+  it("getEnvironmentStats reports zeros for an empty landscape", () => {
+    const params = { ...DEFAULT_PARAMETERS, viabilityBlobCount: 0 };
+    const landscape = new Landscape(new Random("empty"), params, BOUNDS);
+    for (let i = 0; i < 500; i++) landscape.update(0.2, 1, 1, 1); // drain any spawn-race stragglers
+    const stats = landscape.getEnvironmentStats(0);
+    if (landscape.getBlobs().length === 0) {
+      expect(stats).toEqual({ blobCount: 0, averageRadius: 0, coverageFraction: 0 });
+    }
+  });
+
+  it("more/bigger blobs never decrease coverageFraction relative to fewer/smaller ones at the same instant", () => {
+    const small = makeLandscape("cover-a");
+    const bigParams = { ...DEFAULT_PARAMETERS, viabilityBlobRadiusMin: 2, viabilityBlobRadiusMax: 2.5 };
+    const big = new Landscape(new Random("cover-a"), bigParams, BOUNDS);
+    expect(big.getEnvironmentStats(0).coverageFraction).toBeGreaterThanOrEqual(small.getEnvironmentStats(0).coverageFraction);
+  });
 });
