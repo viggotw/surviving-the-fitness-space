@@ -64,13 +64,31 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     blob *position* (a persistent random-walk on heading, not a fixed straight-line drift, plus
     soft containment/clamp at bounds) and blob *population membership* (removing blobs whose life
     cycle has fully shrunk away, stochastically spawning new ones so the population hovers near
-    `viabilityBlobCount`). Each blob's deformation (`phase`) and grow-in/hold/shrink-out envelope
-    (`birthTime`, `growDuration`, `shrinkDuration`, `lifespan`) are instead pure functions of the
+    `viabilityBlobCount`). That spawn rate is **deficit-driven** — proportional to how far the
+    current count sits below the `MAX_POPULATION_SLACK` ceiling, scaled by `refillGain`, which is
+    solved so births (∝ shortfall) and deaths (∝ count) balance exactly at `viabilityBlobCount`.
+    An earlier open-loop version set the rate from the target alone, ignoring the current count;
+    that makes the population a free random walk that spends ~10% of a run at half the target or
+    less and can sit at one or two blobs for minutes, which reads on screen as the whole
+    lava-lamp landscape decaying into a few small circles a few minutes in. Keep the feedback term
+    if touching this. Relatedly, the initial cohort is seeded *aged into its hold phase*
+    (`createBlob`'s `agedIntoHold`): full-size at t=0, so the scene doesn't visibly bloom on
+    startup, but each with a different amount of life left, since a cohort sharing one birth time
+    also dies together and punches a hole in the landscape one lifespan in.
+    Each blob's deformation (`phase`) and grow-in/hold/shrink-out envelope
+    (`birthTime`, `growDuration`, `shrinkDuration`, `lifespan`) are instead functions of the
     `time` argument passed to `fieldValue`/`isViable` — every one of those fields is fixed once a
-    blob exists, so viability queries stay reproducible without needing `update()` to have been
-    called first, even though *which* blobs currently exist is itself state built up by `update()`
-    calls. This is what makes shapes form out of nothing and shrink back out of existence, and
-    keeps drift from settling into a repeating back-and-forth bounce. `getEnvironmentStats(time)`
+    blob exists, so viability queries stay reproducible for a given clock reading, even though
+    *which* blobs currently exist is itself state built up by `update()` calls. This is what makes
+    shapes form out of nothing and shrink back out of existence, and keeps drift from settling into
+    a repeating back-and-forth bounce. Both are measured against the **deform clock** — a
+    `deformClock += dt * environmentDeformationSpeed` accumulator, with `birthTime` stored in its
+    units and query times mapped through `deformTimeAt()`. Integrating the speed forward matters:
+    the earlier version multiplied wall-clock age by the *current* multiplier, so nudging the
+    deform-speed slider retroactively rescaled every blob's age (measured: 0.08 → 0.16 mid-run took
+    the field from 6 blobs to 1 in a single tick) and snapped every wobble to a new point in its
+    cycle. This is the one piece of `update()`-built state the envelope depends on, so it's also
+    why the envelope is no longer a *pure* function of the passed `time` alone. `getEnvironmentStats(time)`
     is a separate, cheap, audio-facing summary (`blobCount`/`averageRadius`/`coverageFraction`,
     the last a naive sum-of-blob-areas-over-world-area that doesn't subtract overlap — an
     overestimate when blobs overlap, but fine for a smooth "how alive does the screen feel"
@@ -267,3 +285,15 @@ scale: `WORLD_SIZE` (fitness-space half-extent), `viabilityBlobRadiusMin/Max`, a
 entirely with "viable" glow (no dark non-viable gaps, nothing ever dies) or organisms render
 oversized relative to the plane. If retuning defaults, sanity-check visually in a browser rather
 than by numbers alone — the emergent overlap/clustering behavior is hard to predict analytically.
+
+Tune landscape density against the **steady state, not the opening frame**. A blob averages ~0.78
+of its base radius across its grow/hold/shrink life, and coverage goes as r², so a landscape holding
+N blobs settles visibly sparser than N full-size blobs look — the first seconds of a run are the
+densest it ever gets, since the initial cohort is seeded full-size. `viabilityBlobCount` is 8
+because that's what holds steady-state coverage (`getEnvironmentStats().coverageFraction`) near the
+~13% that reads as merged, lava-lamp-ish shapes rather than separated circles; 5 settled near 8.5%.
+Note the merged look needs *neighbours to merge with*, so prefer raising the count over
+`viabilityBlobRadiusMin/Max` — an isolated blob renders as an exact circle of its own radius
+(`r²/d² ≥ 1 ⟺ d ≤ r`), so bigger radii alone just yield bigger circles. A cheap way to measure any
+of this: step a bare `Landscape` in a throwaway Vitest file over ~10 minutes across a few seeds and
+watch `getEnvironmentStats`, rather than eyeballing a single run.

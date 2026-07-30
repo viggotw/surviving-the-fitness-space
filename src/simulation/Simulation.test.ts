@@ -64,7 +64,10 @@ describe("Simulation", () => {
   });
 
   it("spawnOrganismAt adds a growing organism inside a viable region", () => {
-    const sim = new Simulation({ seed: 4, initialOrganisms: 0 });
+    // growthStartDelayMax 0 so this asserts on growth itself rather than on
+    // whether the organism's randomly-drawn spawn delay happens to be shorter
+    // than the single tick below.
+    const sim = new Simulation({ seed: 4, initialOrganisms: 0, growthStartDelayMax: 0 });
     const blob = sim.getLandscape().getBlobs()[0];
     sim.spawnOrganismAt(blob.x, blob.y); // dead center of a blob is always viable
     expect(sim.population).toBe(1);

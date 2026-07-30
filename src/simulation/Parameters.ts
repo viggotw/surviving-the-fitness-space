@@ -143,7 +143,11 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   environmentDeformationStrength: 0.3,
   edgeFadeWidth: 0,
 
-  viabilityBlobCount: 5,
+  // 8 rather than 5 because this is the *steady-state* target, and a blob
+  // averages ~0.78 of its base radius over its grow/hold/shrink life — with
+  // coverage going as r², a landscape holding 5 blobs settles noticeably
+  // sparser than 5 full-size blobs look. See "Notes for tuning" in CLAUDE.md.
+  viabilityBlobCount: 8,
   viabilityBlobRadiusMin: 0.7,
   viabilityBlobRadiusMax: 1.4,
 

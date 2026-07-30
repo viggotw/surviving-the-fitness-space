@@ -17,21 +17,25 @@ export interface ViabilityBlob {
   /** trait-space units/second, before the live `environmentDriftSpeed` multiplier; itself a persistent random-walk state, nudged by noise each `update()` */
   vy: number;
 
-  /** radians; fixed per-blob phase offset, combined with `phaseSpeed * time` for deterministic deformation */
+  /** radians; fixed per-blob phase offset, combined with `phaseSpeed * deformTime` for deterministic deformation */
   phase: number;
-  /** radians/second, before the live `environmentDeformationSpeed` multiplier */
+  /** radians per deform-clock second (see `deformClock`) */
   phaseSpeed: number;
 
   /** fraction, 0–1; radius-wobble amplitude as a proportion of `radius`, before the live `environmentDeformationStrength` multiplier */
   deformationStrength: number;
 
-  /** seconds; simulation time at which this blob started growing in from nothing */
+  /**
+   * deform-clock seconds (see `deformClock`) at which this blob started
+   * growing in from nothing. Negative for the initial cohort, which is seeded
+   * already part-way through its life so it doesn't all die off at once.
+   */
   birthTime: number;
-  /** seconds; duration of the grow-in ramp starting at `birthTime` */
+  /** deform-clock seconds; duration of the grow-in ramp starting at `birthTime` */
   growDuration: number;
-  /** seconds; duration of the shrink-out ramp ending at `birthTime + lifespan` */
+  /** deform-clock seconds; duration of the shrink-out ramp ending at `birthTime + lifespan` */
   shrinkDuration: number;
-  /** seconds; total time from birth to fully shrunk-away, including grow and shrink */
+  /** deform-clock seconds; total time from birth to fully shrunk-away, including grow and shrink */
   lifespan: number;
 }
 
@@ -55,7 +59,7 @@ const HOLD_DURATION_RANGE: [number, number] = [12, 28];
 const AVERAGE_LIFESPAN = (GROW_DURATION_RANGE[0] + GROW_DURATION_RANGE[1]) / 2
   + (HOLD_DURATION_RANGE[0] + HOLD_DURATION_RANGE[1]) / 2
   + (SHRINK_DURATION_RANGE[0] + SHRINK_DURATION_RANGE[1]) / 2;
-/** Loose ceiling on simultaneous blobs so a run of unlucky spawns can't grow the population unbounded. */
+/** Hard ceiling on simultaneous blobs; also the zero-birth-rate point the deficit-driven spawn rate ramps down to (see `refillGain`). */
 const MAX_POPULATION_SLACK = 1.5;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -80,9 +84,30 @@ export class Landscape {
   private readonly targetBlobCount: number;
   private readonly blobRadiusMin: number;
   private readonly blobRadiusMax: number;
+  /** Hard ceiling on simultaneous blobs, and the count at which the birth rate reaches zero. */
+  private readonly maxBlobCount: number;
+  /**
+   * Multiplier on the deficit-driven birth rate, solved so the equilibrium
+   * count lands exactly on `targetBlobCount`: births scale with the shortfall
+   * `(maxBlobCount - count)` while deaths scale with `count`, so the two
+   * balance at `maxBlobCount * gain / (1 + gain)`. Feeding the *current*
+   * shortfall back into the rate (rather than spawning at a rate fixed by the
+   * target alone) is what keeps the population near target instead of letting
+   * it random-walk down to one or two blobs and sit there for minutes.
+   */
+  private readonly refillGain: number;
   private deformSpeed = 1;
   private deformStrength = 1;
   private elapsed = 0;
+  /**
+   * Accumulated `dt * environmentDeformationSpeed` — the clock every blob's
+   * lifecycle and wobble phase is measured against. Integrating the speed
+   * forward like this (instead of multiplying wall-clock time by the *current*
+   * speed) is what keeps a mid-run change to the deform-speed slider from
+   * retroactively rescaling every existing blob's age: doubling the multiplier
+   * used to instantly age the whole population past its lifespan and cull it.
+   */
+  private deformClock = 0;
   private nextBlobId = 0;
 
   constructor(rng: Random, params: SimulationParameters, bounds: LandscapeBounds) {
@@ -91,23 +116,36 @@ export class Landscape {
     this.targetBlobCount = params.viabilityBlobCount;
     this.blobRadiusMin = params.viabilityBlobRadiusMin;
     this.blobRadiusMax = params.viabilityBlobRadiusMax;
+    this.maxBlobCount = Math.max(
+      this.targetBlobCount + 1,
+      Math.ceil(this.targetBlobCount * MAX_POPULATION_SLACK),
+    );
+    this.refillGain = this.targetBlobCount / (this.maxBlobCount - this.targetBlobCount);
 
     this.blobs = [];
     for (let i = 0; i < params.viabilityBlobCount; i++) {
-      // Initial blobs start already fully grown (growDuration 0) so the
-      // scene doesn't visibly "bloom" the moment the simulation starts.
-      this.blobs.push(this.createBlob(0, 0));
+      // Initial blobs are seeded at a random point *within* their hold phase:
+      // fully grown already (so the scene doesn't visibly "bloom" on startup),
+      // but each with a different amount of life left, so the opening cohort
+      // dies off staggered instead of all within one lifespan window — which
+      // is what used to drop the landscape to a couple of small islands a few
+      // minutes in, before the birth rate could refill it.
+      this.blobs.push(this.createBlob(0, { agedIntoHold: true }));
     }
   }
 
-  private createBlob(birthTime: number, growDuration?: number): ViabilityBlob {
+  private createBlob(birthTime: number, options?: { agedIntoHold: boolean }): ViabilityBlob {
     const halfW = this.bounds.width / 2;
     const halfH = this.bounds.height / 2;
     const angle = this.rng.range(0, Math.PI * 2);
     const speed = this.rng.range(0.15, 0.5);
-    const grow = growDuration ?? this.rng.range(...GROW_DURATION_RANGE);
+    const grow = this.rng.range(...GROW_DURATION_RANGE);
     const shrink = this.rng.range(...SHRINK_DURATION_RANGE);
     const hold = this.rng.range(...HOLD_DURATION_RANGE);
+    // Backdating birth is what "already part-way through its life" means: the
+    // blob's age at `birthTime` lands somewhere in [grow, grow + hold), i.e.
+    // past the grow-in ramp and before the shrink-out one.
+    const backdate = options?.agedIntoHold ? grow + this.rng.range(0, hold) : 0;
 
     return {
       id: this.nextBlobId++,
@@ -119,7 +157,7 @@ export class Landscape {
       phase: this.rng.range(0, Math.PI * 2),
       phaseSpeed: this.rng.range(0.2, 0.6),
       deformationStrength: this.rng.range(0.15, 0.35),
-      birthTime,
+      birthTime: birthTime - backdate,
       growDuration: grow,
       shrinkDuration: shrink,
       lifespan: grow + hold + shrink,
@@ -139,6 +177,7 @@ export class Landscape {
     this.deformSpeed = deformSpeed;
     this.deformStrength = deformStrength;
     this.elapsed += dt;
+    this.deformClock += dt * deformSpeed;
 
     const halfW = this.bounds.width / 2;
     const halfH = this.bounds.height / 2;
@@ -174,22 +213,39 @@ export class Landscape {
     // Shape turnover (birth/death) is paced by `deformSpeed`, the same knob
     // that governs how fast the wobble itself runs — both are "how quickly
     // does the environment change shape", as opposed to `driftSpeed` (how
-    // fast shapes move around).
-    this.blobs = this.blobs.filter((blob) => (this.elapsed - blob.birthTime) * deformSpeed < blob.lifespan);
+    // fast shapes move around). Both live on `deformClock`, so the pacing
+    // responds to the slider going forward without rewriting blob ages.
+    this.blobs = this.blobs.filter((blob) => this.deformClock - blob.birthTime < blob.lifespan);
 
-    const maxBlobCount = Math.ceil(this.targetBlobCount * MAX_POPULATION_SLACK);
-    if (this.blobs.length < maxBlobCount) {
-      const spawnRatePerSecond = (this.targetBlobCount / AVERAGE_LIFESPAN) * deformSpeed;
+    // Births scale with how far below the ceiling the population currently
+    // sits, so a dip refills quickly and a full landscape stops spawning —
+    // see `refillGain` for why this balances out exactly at the target count.
+    const shortfall = this.maxBlobCount - this.blobs.length;
+    if (shortfall > 0) {
+      const spawnRatePerSecond = (shortfall / AVERAGE_LIFESPAN) * this.refillGain * deformSpeed;
       const spawnProbability = Math.min(1, spawnRatePerSecond * dt);
       if (this.rng.next() < spawnProbability) {
-        this.blobs.push(this.createBlob(this.elapsed));
+        this.blobs.push(this.createBlob(this.deformClock));
       }
     }
   }
 
+  /**
+   * The deform clock's value at an arbitrary query `time`, extrapolated from
+   * where the clock is *now* at the current deform speed. Queries at the
+   * current simulation time (the overwhelmingly common case) land exactly on
+   * `deformClock`; offset queries — a caller asking what a blob looks like a
+   * few seconds either side of now — scale that offset by the live speed, so
+   * "this grow-in ramp has `growDuration` deform-seconds left" still reads as
+   * the intuitive number of wall-clock seconds.
+   */
+  private deformTimeAt(time: number): number {
+    return this.deformClock + (time - this.elapsed) * this.deformSpeed;
+  }
+
   /** 0–1 grow-in/hold/shrink-out envelope; 0 outside the blob's lifespan, so it reads as forming from and dissolving into nothing. */
   private lifecycleEnvelope(blob: ViabilityBlob, time: number): number {
-    const age = (time - blob.birthTime) * this.deformSpeed;
+    const age = this.deformTimeAt(time) - blob.birthTime;
     if (age < 0) return 0;
     if (age < blob.growDuration) return smoothstep(0, blob.growDuration, age);
     const shrinkStart = blob.lifespan - blob.shrinkDuration;
@@ -199,7 +255,10 @@ export class Landscape {
   }
 
   private effectiveRadius(blob: ViabilityBlob, time: number): number {
-    const t = blob.phase + blob.phaseSpeed * this.deformSpeed * time;
+    // On the deform clock too, so moving the deform-speed slider changes how
+    // fast the wobble runs from here on instead of snapping every shape to a
+    // different point in its cycle.
+    const t = blob.phase + blob.phaseSpeed * this.deformTimeAt(time);
     const wobble = blob.deformationStrength * this.deformStrength;
     // Two incommensurate harmonics instead of one clean sine, so the wobble
     // itself doesn't read as a single repeating back-and-forth cycle.

@@ -70,6 +70,12 @@ when audio is on (not a "Mute" checkbox you have to double-negative your way thr
 | Deform strength | multiplier on how much regions pulse/deform |
 | Edge fading | width of the interior band, near a region's edge, over which the floor dims and organism growth throttles toward zero; 0 (default) is a hard binary edge with no interior throttling |
 
+All four are safe to move mid-run: they change how the environment behaves from that moment on,
+without jumping the regions that are already on screen to a different point in their life cycle.
+The number of regions and their size range aren't exposed here — they're defaults in
+`Parameters.ts`, tuned so the landscape holds a merged, lava-lamp-ish density indefinitely rather
+than thinning out over the first few minutes.
+
 **Organisms** — governs individual growth and reproduction. Sizes are shown as a percentage of
 the fitness space's half-width, not raw trait-space units, so they read as "how big relative to
 the play area" instead of tiny decimals. Growth rate, birth radius, and burst radius are shared

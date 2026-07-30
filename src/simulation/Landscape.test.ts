@@ -95,6 +95,56 @@ describe("Landscape", () => {
     expect(withExaggeratedWobble).not.toBe(withNoWobble);
   });
 
+  it("raising environmentDeformationSpeed mid-run doesn't retroactively age (and cull) existing blobs", () => {
+    const landscape = makeLandscape("deform-speed-change");
+    // Build up some run history, so blobs have real accumulated age to rescale.
+    for (let i = 0; i < 600; i++) landscape.update(0.1, 1, 0.08, 0.3);
+
+    const now = 60; // == accumulated elapsed time above
+    const before = landscape.getEnvironmentStats(now);
+
+    // A dt of 0 advances no time at all, so *nothing* about the current
+    // instant may change just because the speed multiplier did.
+    landscape.update(0, 1, 0.16, 0.3);
+    const after = landscape.getEnvironmentStats(now);
+
+    expect(after.blobCount).toBe(before.blobCount);
+    expect(after.averageRadius).toBeCloseTo(before.averageRadius, 10);
+    expect(after.coverageFraction).toBeCloseTo(before.coverageFraction, 10);
+  });
+
+  it("blob population stays near viabilityBlobCount over a long run instead of drifting down", () => {
+    const landscape = makeLandscape("population-stability");
+    const target = DEFAULT_PARAMETERS.viabilityBlobCount;
+
+    let min = Infinity;
+    let max = 0;
+    let total = 0;
+    let starved = 0;
+    let samples = 0;
+    for (let i = 0; i < 6000; i++) {
+      landscape.update(0.1, 1, 1, 1);
+      const count = landscape.getBlobs().length;
+      min = Math.min(min, count);
+      max = Math.max(max, count);
+      if (count <= target / 2) starved++;
+      total += count;
+      samples++;
+    }
+
+    // The deficit-driven birth rate is what holds the mean on target and makes
+    // deep dips both rare and short: with a rate fixed by the target alone the
+    // count random-walks freely below it (spending ~10% of a run at half the
+    // target or less, and able to sit at one or two blobs for minutes), which
+    // is what turned the landscape into a few small islands.
+    expect(total / samples).toBeGreaterThan(target - 1);
+    expect(total / samples).toBeLessThan(target + 1);
+    expect(starved / samples).toBeLessThan(0.05);
+    // Never empties out entirely, never exceeds the hard ceiling.
+    expect(min).toBeGreaterThan(0);
+    expect(max).toBeLessThanOrEqual(Math.ceil(target * 1.5));
+  });
+
   it("is deterministic for a given seed", () => {
     const a = makeLandscape(99);
     const b = makeLandscape(99);
