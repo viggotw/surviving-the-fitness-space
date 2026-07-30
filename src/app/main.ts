@@ -48,6 +48,9 @@ function frame(now: number): void {
 
   simulation.update(dt);
   spawnBudget.update(dt, simulation.isExtinct, simulation.timeSinceExtinction);
+  music.updateEnvironment(simulation.getLandscape().getEnvironmentStats(simulation.time), simulation.params.viabilityBlobRadiusMax);
+  for (let i = 0; i < simulation.burstsThisTick; i++) music.playPop(simulation.population);
+  for (let i = 0; i < simulation.fallsThisTick; i++) music.playFall(simulation.population);
   renderer.sync(simulation);
   renderer.render();
   controls.update();

@@ -70,7 +70,12 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     blob exists, so viability queries stay reproducible without needing `update()` to have been
     called first, even though *which* blobs currently exist is itself state built up by `update()`
     calls. This is what makes shapes form out of nothing and shrink back out of existence, and
-    keeps drift from settling into a repeating back-and-forth bounce.
+    keeps drift from settling into a repeating back-and-forth bounce. `getEnvironmentStats(time)`
+    is a separate, cheap, audio-facing summary (`blobCount`/`averageRadius`/`coverageFraction`,
+    the last a naive sum-of-blob-areas-over-world-area that doesn't subtract overlap — an
+    overestimate when blobs overlap, but fine for a smooth "how alive does the screen feel"
+    signal rather than an exact one) — not for visuals, which sample `fieldValue` per-pixel
+    instead (see `FitnessPlane.ts`).
   - `Organism.ts` — the `Organism` type and its asynchronous per-organism lifecycle
     (`alive → dying` on leaving a viable region, `alive → bursting → removed` on reaching the
     live `params.burstRadius`, spawning up to `params.offspringCount` mutated offspring).
@@ -102,7 +107,8 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     `Simulation`'s public surface
     (`getOrganisms()`, `getLandscape()`, `params`, `update()`, `setParams()`, `seedPopulation()`,
     `spawnOrganismAt(x, y)`, `killAll()`, `reset()`, `paused`, `burstCount`, `deadCount`, `runTime`,
-    `timeSinceExtinction`) is the only thing rendering/UI code may touch.
+    `timeSinceExtinction`, `burstsThisTick`, `fallsThisTick`) is the only thing rendering/UI code
+    may touch.
     `spawnOrganismAt` is `seedPopulation`'s single-point counterpart (e.g. for click-to-spawn): it
     always honors the request, displacing the oldest organism to make room at the population cap
     rather than silently no-oping. `killAll()` marks every organism `dying` rather than clearing
@@ -121,7 +127,13 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     from 0 on that same next-spawn trigger. `timeSinceExtinction` (a thin getter over the
     pre-existing `extinctionTimer`, also used to gate `autoReseedOnExtinction`) is what `StatsHud`
     uses to delay the "click to add a ball" prompt's fade-in, and what `SpawnBudget` (see
-    `src/app/`) uses to time its post-extinction refill.
+    `src/app/`) uses to time its post-extinction refill. `burstsThisTick`/`fallsThisTick` are a
+    different kind of counter — *transient*, overwritten (not accumulated) at the very top of every
+    `update()` call (before the `paused` early-return, specifically so a paused tick doesn't leave
+    a stale nonzero count sitting there re-triggering the same sound effect every frame) — a caller
+    must read them right after calling `update()` to see that tick's events before the next tick
+    clears them. `main.ts` is the only reader, calling `Music.playPop()`/`playFall()` once per
+    event.
 
 - `src/rendering/` — Three.js. Reads simulation state every frame via `Renderer3D.sync(simulation)`
   but never advances simulation time itself.
@@ -143,9 +155,15 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
     API `main.ts` needs for click-to-spawn.
 
 - `src/ui/` — `Controls.ts` is a Tweakpane dev panel grouped into folders (Environment / Organisms
-  / Population) so it's clear what governs the drifting viable regions vs. individual organism
-  behavior vs. overall population bookkeeping. Global transport controls (Play/Pause, Mute, Reset)
-  sit at the top of the panel, outside any folder. `Presets.ts` and `ExplanationOverlay.ts` are
+  / Population / Audio) so it's clear what governs the drifting viable regions vs. individual
+  organism behavior vs. overall population bookkeeping vs. sound. Global transport controls
+  (Play/Pause, Sound, Reset) sit at the top of the panel, outside any folder — "Sound" (not "Mute")
+  is deliberately phrased so *checked* means sound is on, avoiding a double-negative checkbox;
+  internally it's still `Music.setMuted(!ev.value)`, only the UI-facing sense is inverted. The
+  "Audio (temporary)" folder (music/pop/fall volume sliders, each wired straight to
+  `Music.set*Volume()`) exists purely so the mix can be tuned live; per the code's own doc comment
+  it's meant to collapse into a single "Effects" on/off checkbox later, once levels are settled —
+  don't build further on top of it as if it were permanent. `Presets.ts` and `ExplanationOverlay.ts` are
   currently stubs (only a `Default` preset; overlay hidden with no content) — the full preset set
   and explanation-mode captions are deferred. `StatsHud.ts` is a separate, much smaller display
   (the `#stats` element, top-center, outside the Tweakpane panel entirely, its text centered): a
@@ -162,14 +180,51 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   element rather than living inside Controls, since it's meant to always be visible, not tucked
   behind the collapsed panel.
 
-- `src/audio/Music.ts` — a generative ambient pad synthesized with the Web Audio API; there's no
-  bundled audio asset in this project, so nothing is loaded or fetched. `start()` lazily builds the
-  audio graph (a handful of detuned oscillators through a slowly-swept lowpass filter) and is
-  idempotent/safe to call repeatedly — browsers block audio until a user gesture, so `main.ts`
-  calls it from a one-time `window` `pointerdown` listener rather than tying it to any specific UI
-  element. `setMuted()` only touches the master gain node (via `setTargetAtTime` for a click-free
-  fade, not an instant cut) — it never stops/restarts the oscillators, so unmuting resumes the
-  same continuously-evolving texture rather than starting over.
+- `src/audio/Music.ts` — all audio, synthesized with the Web Audio API; there's no bundled audio
+  asset in this project, so nothing is loaded or fetched. Three independent pieces share one mute
+  switch (`masterGain`, a pure on/off value — never the volume itself) but each has its own
+  downstream volume bus (`musicVolumeGain`/`popVolumeGain`/`fallVolumeGain`) so muting and
+  per-sound-type loudness stay fully decoupled:
+  - The ambient pad (`start()`, lazily building the graph — idempotent/safe to call repeatedly,
+    since browsers block audio until a user gesture and `main.ts` calls it from a one-time
+    `window` `pointerdown` listener rather than tying it to any specific UI element): an
+    organ-registration-style chord (`CHORD_INTERVALS`/`SUB_OCTAVE_RATIO` — open fifths/octaves plus
+    a 16'-style sub and a 12th/15th "mixture" pair on top, deliberately no third, for an
+    archetypal/timeless rather than emotionally major-or-minor feel) of detuned `triangle`-wave
+    voice pairs (the sub-octave alone, undetuned — pairing something that low produces a muddy beat
+    rather than a chorus shimmer) through a lowpass filter, then split into a dry path and a wet
+    path through `createReverbImpulse` (a synthesized, not recorded, cathedral-length impulse
+    response — same "no bundled asset" reasoning as the rest of this file) before being summed back
+    together — the reverb is the single biggest contributor to the intended grand/spacious feeling.
+    `updateEnvironment(stats, maxBlobRadius)`
+    (called every frame from `main.ts`, internally throttled to `ENV_UPDATE_INTERVAL_MS` since the
+    landscape barely changes faster than that) re-targets three params from
+    `Landscape.getEnvironmentStats()` so the pad reflects what's actually on screen:
+    `coverageFraction` opens/closes the filter, `blobCount` scales a dedicated `densityGain` node,
+    and `averageRadius` (normalized against `viabilityBlobRadiusMax`) shifts the chord's root pitch
+    down as shapes get bigger. All three glide via `setTargetAtTime` over `ENV_GLIDE_SECONDS`
+    rather than snapping, so the sound drifts rather than visibly tracking the sim tick-by-tick.
+  - `playPop()`/`playFall()` — very short, very quiet synthesized blips for an organism
+    successfully bursting / starting to fall (leaving a viable region), triggered from `main.ts`
+    once per event reported by `Simulation.burstsThisTick`/`fallsThisTick`, each call passed the
+    live `simulation.population`. Two independent throttles keep a large population from turning
+    into noise: each is capped at `MAX_SFX_VOICES` *concurrent* voices (extra triggers within the
+    same brief window are simply skipped), and separately each individual event's own peak volume
+    decays — via `sfxVolumeFactor(population, floorFraction)`, `1` (no decay) at population 0 down
+    to `floorFraction` of the current slider volume by `SFX_DECAY_POPULATION` (100), curved by
+    `SFX_DECAY_EXPONENT` so it stays close to full volume for a "few balls" run and only falls off
+    steeply as population climbs — since voice-capping alone only limits how many can sound *at
+    once*, not how often new ones fire (a population of hundreds still fires far more pop/fall
+    events per second than a population of a few, even with the same cap). `playPop`/`playFall`
+    both skip building any audio nodes at all once the decayed peak is near-silent (`<= 0.001`),
+    which matters since these are exactly the high-population conditions where nodes would
+    otherwise be created most often. Self-cleaning: each voice disconnects itself and decrements
+    the active-voice count from its own `onended` handler.
+  - Volume/mute setters (`setMuted`, `setMusicVolume`, `setPopVolume`, `setFallVolume`) all follow
+    the same pattern: store the value on the instance (so it applies once `start()` eventually
+    builds the graph, even if called beforehand) and, if the relevant gain node already exists,
+    glide to it via `setTargetAtTime` rather than snapping — avoids audible clicks on a dragged
+    slider or a toggled checkbox.
 
 - `src/app/SpawnBudget.ts` — a limited, regenerating resource (`MAX_SPAWNS`, default 3) gating how
   many times the player can click-to-spawn. A pacing/game mechanic layered on top of the
@@ -184,9 +239,11 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   exactly what `main.ts`'s click handler checks to block spawning when the budget is empty.
 
 - `src/app/main.ts` — the only place the per-frame loop is wired:
-  `simulation.update(dt) → spawnBudget.update(dt, ...) → renderer.sync(simulation) →
-  renderer.render() → controls.update() → statsHud.update(...)`, with `dt` clamped to `1/20` so a
-  backgrounded tab doesn't cause a simulation spiral on refocus. Also wires the click-to-spawn
+  `simulation.update(dt) → spawnBudget.update(dt, ...) → music.updateEnvironment(...) →
+  music.playPop()/playFall() (once per Simulation.burstsThisTick/fallsThisTick) →
+  renderer.sync(simulation) → renderer.render() → controls.update() → statsHud.update(...)`, with
+  `dt` clamped to `1/20` so a backgrounded tab doesn't cause a simulation spiral on refocus. Also
+  wires the click-to-spawn
   interaction: a click on `#scene` first calls `spawnBudget.tryConsume()` (returning early, doing
   nothing, if the budget is empty) and only then is converted to NDC, raycast to a trait-space
   point via `Renderer3D.raycastToTraitSpace`, and handed to `Simulation.spawnOrganismAt(x, y)` — no

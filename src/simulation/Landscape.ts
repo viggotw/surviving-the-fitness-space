@@ -256,4 +256,31 @@ export class Landscape {
   setBounds(bounds: LandscapeBounds): void {
     this.bounds = bounds;
   }
+
+  /**
+   * Rough, cheap environment metrics meant for driving audio (not visuals —
+   * `FitnessPlane` samples `fieldValue` per-pixel for that). `coverageFraction`
+   * sums each blob's own circular area and divides by the world's area; it
+   * doesn't subtract overlap between blobs, so it's an overestimate when
+   * blobs overlap, but that's fine for a smooth-and-cheap "how much of the
+   * screen feels alive right now" signal rather than an exact figure.
+   */
+  getEnvironmentStats(time: number): { blobCount: number; averageRadius: number; coverageFraction: number } {
+    if (this.blobs.length === 0) return { blobCount: 0, averageRadius: 0, coverageFraction: 0 };
+
+    let totalRadius = 0;
+    let totalArea = 0;
+    for (const blob of this.blobs) {
+      const r = Math.max(0, this.effectiveRadius(blob, time));
+      totalRadius += r;
+      totalArea += Math.PI * r * r;
+    }
+
+    const worldArea = this.bounds.width * this.bounds.height;
+    return {
+      blobCount: this.blobs.length,
+      averageRadius: totalRadius / this.blobs.length,
+      coverageFraction: worldArea > 0 ? Math.min(1, totalArea / worldArea) : 0,
+    };
+  }
 }
