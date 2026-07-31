@@ -188,9 +188,11 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   changes the dynamics like the Environment sliders do; it's also the one slider deliberately *not*
   centered on its default, since 1× is real time and there's nothing slower to offer. The three
   environment multipliers (drift speed / deform speed / deform strength) are each bound *twice* by
-  `bindMultiplier`: a centered slider in Environment for everyday tuning, plus a field with no
+  `bindMultiplier`: a slider in Environment for everyday tuning, plus a field with no
   min/max in a collapsed "Beyond the sliders" folder for values the slider range deliberately can't
-  reach. Tweakpane clamps a bound value to its binding's own min/max, so one widget genuinely can't
+  reach. Deform speed/strength derive centered ranges from their defaults; drift speed instead has a
+  hand-picked `0.1`–`10` range (its default of 5 lands within half a percent of center anyway, and
+  keeping both round endpoints beat solving for exactness). Tweakpane clamps a bound value to its binding's own min/max, so one widget genuinely can't
   do both, and one shared state field can't hold both a slider position and a value past that
   slider's end — hence the separate `…Raw` state keys, the slider pinning at its end while the raw
   field holds the real value, and the `syncing` guard (refreshing the slider makes it emit a change

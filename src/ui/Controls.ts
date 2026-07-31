@@ -176,9 +176,9 @@ export class Controls {
       rawKey: MultiplierRawKey,
       label: string,
       step: number,
+      range: { min: number; max: number },
       apply: (value: number) => void,
     ): void => {
-      const range = centeredFromMin(p[key], 0);
       const slider = environment.addBinding(this.state, key, { label, ...range, step });
       const raw = extremes.addBinding(this.state, rawKey, { label, step });
 
@@ -200,14 +200,24 @@ export class Controls {
       });
     };
 
-    bindMultiplier("environmentDriftSpeed", "environmentDriftSpeedRaw", "Drift speed (×)", 0.005, (v) =>
-      simulation.setParams({ environmentDriftSpeed: v }),
+    // Drift speed gets a hand-picked range rather than a centered one: 0.1 (a
+    // slow crawl, but never fully frozen) up to 10, which puts its default of 5
+    // within half a percent of the lever's center — near enough that solving for
+    // exact centering isn't worth giving up either round endpoint.
+    bindMultiplier(
+      "environmentDriftSpeed",
+      "environmentDriftSpeedRaw",
+      "Drift speed (×)",
+      0.05,
+      { min: 0.1, max: 10 },
+      (v) => simulation.setParams({ environmentDriftSpeed: v }),
     );
     bindMultiplier(
       "environmentDeformationSpeed",
       "environmentDeformationSpeedRaw",
       "Deform speed (×)",
       0.005,
+      centeredFromMin(p.environmentDeformationSpeed, 0),
       (v) => simulation.setParams({ environmentDeformationSpeed: v }),
     );
     // Each blob's own wobble amplitude tops out at 0.35, so once this multiplier
@@ -221,6 +231,7 @@ export class Controls {
       "environmentDeformationStrengthRaw",
       "Deform strength (×)",
       0.01,
+      centeredFromMin(p.environmentDeformationStrength, 0),
       (v) => simulation.setParams({ environmentDeformationStrength: v }),
     );
     environment

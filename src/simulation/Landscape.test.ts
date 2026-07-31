@@ -69,6 +69,28 @@ describe("Landscape", () => {
     }
   });
 
+  it("containment holds at extreme drift speeds, not just the tuned one", () => {
+    const halfW = BOUNDS.width / 2;
+    const halfH = BOUNDS.height / 2;
+
+    // 10 is the top of the drift slider; 100 is the kind of value the unclamped
+    // "Beyond the sliders" field allows. The soft restoring force isn't dt-scaled
+    // and is applied after the speed cap, so a fast drift is exactly where blobs
+    // would escape or bounce out if the hard clamp weren't backing it up.
+    for (const driftSpeed of [10, 100]) {
+      const landscape = makeLandscape(`fast-drift-${driftSpeed}`);
+      for (let i = 0; i < 3000; i++) {
+        landscape.update(1 / 20, driftSpeed, 1, 1);
+        for (const blob of landscape.getBlobs()) {
+          expect(Number.isFinite(blob.x)).toBe(true);
+          expect(Number.isFinite(blob.y)).toBe(true);
+          expect(Math.abs(blob.x)).toBeLessThanOrEqual(halfW);
+          expect(Math.abs(blob.y)).toBeLessThanOrEqual(halfH);
+        }
+      }
+    }
+  });
+
   it("field shape changes as time advances (deformation)", () => {
     const landscape = makeLandscape();
     const blob = landscape.getBlobs()[0];

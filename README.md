@@ -82,7 +82,9 @@ The number of regions and their size range aren't exposed here — they're defau
 `Parameters.ts`, tuned so the landscape holds a merged, lava-lamp-ish density indefinitely rather
 than thinning out over the first few minutes.
 
-Each slider is centered on its default, so the range only reaches 2× that. **Beyond the sliders** is
+Deform speed and deform strength are centered on their defaults, so those ranges reach 2× them;
+drift speed runs 0.1×–10× around a default of 5, since moving shapes around faster doesn't thin the
+landscape out the way faster turnover would. **Beyond the sliders** is
 a collapsed folder holding the same three multipliers as plain number fields with no limits at all,
 for trying genuinely extreme values. Type into those and the matching slider just pins at its end
 while the field holds the real value; move the slider afterwards and it takes over again. Worth

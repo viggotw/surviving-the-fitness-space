@@ -138,12 +138,15 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
 
   hueMutation: 0.03,
 
-  // These three were each half their current value until a 25-minute run at
-  // the faster settings confirmed the landscape holds its density there (the
-  // `viabilityBlobCount` note below was measured at exactly these values).
-  // Deform speed in particular paces blob turnover, so it's the one that
-  // decides how quickly the landscape's shapes keep changing.
-  environmentDriftSpeed: 0.6,
+  // Deform speed/strength were each half their current value until a
+  // 25-minute run at the faster settings confirmed the landscape holds its
+  // density there (the `viabilityBlobCount` note below was measured at those
+  // values). Deform speed in particular paces blob turnover, so it's the one
+  // that decides how quickly the landscape's shapes keep changing.
+  // Drift speed is independent of all that — it only moves shapes around, and
+  // measurably doesn't affect how many exist or how big they are — so it's
+  // free to be much larger than the other two without thinning the landscape.
+  environmentDriftSpeed: 5,
   environmentDeformationSpeed: 0.16,
   environmentDeformationStrength: 0.6,
   edgeFadeWidth: 0,
