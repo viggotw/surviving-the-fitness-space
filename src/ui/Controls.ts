@@ -26,6 +26,13 @@ function centeredFromMax(value: number, max: number): { min: number; max: number
   return { min: 2 * value - max, max };
 }
 
+/** The three environment multipliers that get both a slider and an unclamped field. See `bindMultiplier`. */
+type MultiplierKey =
+  | "environmentDriftSpeed"
+  | "environmentDeformationSpeed"
+  | "environmentDeformationStrength";
+type MultiplierRawKey = `${MultiplierKey}Raw`;
+
 interface ControlsState {
   playing: boolean;
   /** Playback speed multiplier — transport, not a simulation parameter. See `Simulation.timeScale`. */
@@ -39,6 +46,13 @@ interface ControlsState {
   environmentDriftSpeed: number;
   environmentDeformationSpeed: number;
   environmentDeformationStrength: number;
+  // The unclamped counterparts of the three above. Held separately rather than
+  // shared with the slider bindings because Tweakpane clamps a bound value to
+  // its own min/max: one state field can't be both a slider position and a
+  // value beyond that slider's range.
+  environmentDriftSpeedRaw: number;
+  environmentDeformationSpeedRaw: number;
+  environmentDeformationStrengthRaw: number;
   edgeFadeWidth: number;
   /** % of WORLD_SIZE — see SIZE_DISPLAY_SCALE */
   variationRadius: number;
@@ -64,6 +78,14 @@ interface ControlsState {
  */
 export class Controls {
   private readonly pane: Pane;
+  /** The read-only population readout, refreshed on its own each frame — see `update()`. */
+  private readonly populationMonitor: { refresh(): void };
+  /**
+   * Set while a slider/unclamped-field pair is being kept in sync, so the
+   * change event that the counterpart emits when refreshed doesn't bounce back
+   * and overwrite the value that started the sync. See `bindMultiplier`.
+   */
+  private syncing = false;
   private readonly state: ControlsState;
   private readonly simulation: Simulation;
 
@@ -83,6 +105,9 @@ export class Controls {
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
       environmentDeformationStrength: p.environmentDeformationStrength,
+      environmentDriftSpeedRaw: p.environmentDriftSpeed,
+      environmentDeformationSpeedRaw: p.environmentDeformationSpeed,
+      environmentDeformationStrengthRaw: p.environmentDeformationStrength,
       edgeFadeWidth: p.edgeFadeWidth,
       variationRadius: toDisplaySize(p.variationRadius),
       growthRate: toDisplaySize(p.growthRate),
@@ -127,31 +152,77 @@ export class Controls {
     // Every slider range below is solved so today's default sits at the
     // lever's center — pushing left slows/shrinks it, right speeds/grows it.
     const environment = this.pane.addFolder({ title: "Environment", expanded: true });
-    environment
-      .addBinding(this.state, "environmentDriftSpeed", {
-        label: "Drift speed (×)",
-        ...centeredFromMin(p.environmentDriftSpeed, 0),
-        step: 0.005,
-      })
-      .on("change", (ev) => simulation.setParams({ environmentDriftSpeed: ev.value }));
-    environment
-      .addBinding(this.state, "environmentDeformationSpeed", {
-        label: "Deform speed (×)",
-        ...centeredFromMin(p.environmentDeformationSpeed, 0),
-        step: 0.005,
-      })
-      .on("change", (ev) => simulation.setParams({ environmentDeformationSpeed: ev.value }));
-    environment
-      // Each blob's own wobble amplitude tops out at 0.35, so once this
-      // multiplier crosses ~2.86× the `1 + wobble * wave` term can cross
-      // zero and the effective radius flips sign. The centered range below
-      // stays well under that regardless of the current default.
-      .addBinding(this.state, "environmentDeformationStrength", {
-        label: "Deform strength (×)",
-        ...centeredFromMin(p.environmentDeformationStrength, 0),
-        step: 0.01,
-      })
-      .on("change", (ev) => simulation.setParams({ environmentDeformationStrength: ev.value }));
+    // Unclamped counterparts to the three sliders below, for trying values the
+    // slider ranges deliberately don't reach. Collapsed, and placed after the
+    // sliders, so the everyday controls stay the obvious ones.
+    const extremes = this.pane.addFolder({ title: "Beyond the sliders", expanded: false });
+
+    /**
+     * Binds one environment multiplier twice: a slider centered on its default
+     * for everyday tuning, and a field in `extremes` with no min/max at all, so
+     * any value can be typed. Both write the same parameter, and each pushes the
+     * new value to the other's display.
+     *
+     * The slider's own state is deliberately kept inside its range — it pins at
+     * the end while the raw value is past it — because Tweakpane clamps a bound
+     * value to the binding's min/max, so a slider simply cannot represent 8× on
+     * a 0–1.2 range. That's also why the `syncing` guard is needed: refreshing
+     * the slider makes it emit a change event carrying its *clamped* value,
+     * which would otherwise be applied as if the user had dragged it there and
+     * would overwrite the extreme value just typed.
+     */
+    const bindMultiplier = (
+      key: MultiplierKey,
+      rawKey: MultiplierRawKey,
+      label: string,
+      step: number,
+      apply: (value: number) => void,
+    ): void => {
+      const range = centeredFromMin(p[key], 0);
+      const slider = environment.addBinding(this.state, key, { label, ...range, step });
+      const raw = extremes.addBinding(this.state, rawKey, { label, step });
+
+      slider.on("change", (ev) => {
+        if (this.syncing) return;
+        this.syncing = true;
+        apply(ev.value);
+        this.state[rawKey] = ev.value;
+        raw.refresh();
+        this.syncing = false;
+      });
+      raw.on("change", (ev) => {
+        if (this.syncing) return;
+        this.syncing = true;
+        apply(ev.value);
+        this.state[key] = Math.max(range.min, Math.min(range.max, ev.value));
+        slider.refresh();
+        this.syncing = false;
+      });
+    };
+
+    bindMultiplier("environmentDriftSpeed", "environmentDriftSpeedRaw", "Drift speed (×)", 0.005, (v) =>
+      simulation.setParams({ environmentDriftSpeed: v }),
+    );
+    bindMultiplier(
+      "environmentDeformationSpeed",
+      "environmentDeformationSpeedRaw",
+      "Deform speed (×)",
+      0.005,
+      (v) => simulation.setParams({ environmentDeformationSpeed: v }),
+    );
+    // Each blob's own wobble amplitude tops out at 0.35, so once this multiplier
+    // crosses ~2.86× the `1 + wobble * wave` term crosses zero and the effective
+    // radius flips sign — blobs then wink out at each wobble trough instead of
+    // just pulsing (harmless, `fieldValue` skips them, but it stops reading as
+    // deformation). The slider range stays well under that; the unclamped field
+    // is exactly where you'd go to see it.
+    bindMultiplier(
+      "environmentDeformationStrength",
+      "environmentDeformationStrengthRaw",
+      "Deform strength (×)",
+      0.01,
+      (v) => simulation.setParams({ environmentDeformationStrength: v }),
+    );
     environment
       // 0 reproduces the original hard binary edge exactly (no interior
       // throttling); higher values widen the interior band near a shape's
@@ -250,7 +321,7 @@ export class Controls {
         step: 10,
       })
       .on("change", (ev) => simulation.setParams({ maxOrganisms: ev.value }));
-    population.addBinding(this.state, "population", {
+    this.populationMonitor = population.addBinding(this.state, "population", {
       label: "Population (organisms)",
       readonly: true,
       // Organism count is a whole number — the default monitor format shows
@@ -280,7 +351,13 @@ export class Controls {
   update(): void {
     if (this.state.population !== this.simulation.population) {
       this.state.population = this.simulation.population;
-      this.pane.refresh();
+      // Refreshes *only* the population monitor, not the whole pane. A
+      // pane-wide refresh re-reads every binding and fires a change event on
+      // any whose value moved — which, since population changes almost every
+      // frame, meant the "Beyond the sliders" fields were continuously reset
+      // to their slider's clamped value (see bindMultiplier). It also did
+      // ~25 bindings' worth of work per frame to update one readout.
+      this.populationMonitor.refresh();
     }
   }
 

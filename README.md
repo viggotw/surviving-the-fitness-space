@@ -82,6 +82,14 @@ The number of regions and their size range aren't exposed here — they're defau
 `Parameters.ts`, tuned so the landscape holds a merged, lava-lamp-ish density indefinitely rather
 than thinning out over the first few minutes.
 
+Each slider is centered on its default, so the range only reaches 2× that. **Beyond the sliders** is
+a collapsed folder holding the same three multipliers as plain number fields with no limits at all,
+for trying genuinely extreme values. Type into those and the matching slider just pins at its end
+while the field holds the real value; move the slider afterwards and it takes over again. Worth
+knowing for deform strength: past roughly 2.9× the wobble is deeper than a region's own radius, so
+regions wink out at each pulse trough instead of pulsing — harmless, but it stops looking like
+deformation.
+
 **Organisms** — governs individual growth and reproduction. Sizes are shown as a percentage of
 the fitness space's half-width, not raw trait-space units, so they read as "how big relative to
 the play area" instead of tiny decimals. Growth rate, birth radius, and burst radius are shared

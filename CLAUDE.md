@@ -186,7 +186,19 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   (Play/Pause, Speed, Sound, Reset) sit at the top of the panel, outside any folder — Speed is up
   there with Play/Pause because it's playback (`Simulation.timeScale`), not a tuning knob that
   changes the dynamics like the Environment sliders do; it's also the one slider deliberately *not*
-  centered on its default, since 1× is real time and there's nothing slower to offer. "Sound" (not "Mute")
+  centered on its default, since 1× is real time and there's nothing slower to offer. The three
+  environment multipliers (drift speed / deform speed / deform strength) are each bound *twice* by
+  `bindMultiplier`: a centered slider in Environment for everyday tuning, plus a field with no
+  min/max in a collapsed "Beyond the sliders" folder for values the slider range deliberately can't
+  reach. Tweakpane clamps a bound value to its binding's own min/max, so one widget genuinely can't
+  do both, and one shared state field can't hold both a slider position and a value past that
+  slider's end — hence the separate `…Raw` state keys, the slider pinning at its end while the raw
+  field holds the real value, and the `syncing` guard (refreshing the slider makes it emit a change
+  event carrying its *clamped* value, which would otherwise be applied as if the user had dragged
+  it there). Relatedly, `update()` refreshes only the `populationMonitor` binding rather than calling
+  `pane.refresh()`: a pane-wide refresh fires change events on every binding whose value moved, and
+  since population changes nearly every frame it was resetting those raw fields continuously.
+  "Sound" (not "Mute")
   is deliberately phrased so *checked* means sound is on, avoiding a double-negative checkbox;
   internally it's still `Music.setMuted(!ev.value)`, only the UI-facing sense is inverted. The
   "Audio (temporary)" folder (music/pop/fall volume sliders, each wired straight to
@@ -307,6 +319,8 @@ N blobs settles visibly sparser than N full-size blobs look — the first second
 densest it ever gets, since the initial cohort is seeded full-size. `viabilityBlobCount` is 8
 because that's what holds steady-state coverage (`getEnvironmentStats().coverageFraction`) near the
 ~13% that reads as merged, lava-lamp-ish shapes rather than separated circles; 5 settled near 8.5%.
+That was measured at the current default drift/deform speeds (which are themselves double what they
+originally were), and holds across a 10-minute, 40-seed sweep as well as a 25-minute manual run.
 Note the merged look needs *neighbours to merge with*, so prefer raising the count over
 `viabilityBlobRadiusMin/Max` — an isolated blob renders as an exact circle of its own radius
 (`r²/d² ≥ 1 ⟺ d ≤ r`), so bigger radii alone just yield bigger circles. A cheap way to measure any

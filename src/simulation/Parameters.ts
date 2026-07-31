@@ -138,9 +138,14 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
 
   hueMutation: 0.03,
 
-  environmentDriftSpeed: 0.3,
-  environmentDeformationSpeed: 0.08,
-  environmentDeformationStrength: 0.3,
+  // These three were each half their current value until a 25-minute run at
+  // the faster settings confirmed the landscape holds its density there (the
+  // `viabilityBlobCount` note below was measured at exactly these values).
+  // Deform speed in particular paces blob turnover, so it's the one that
+  // decides how quickly the landscape's shapes keep changing.
+  environmentDriftSpeed: 0.6,
+  environmentDeformationSpeed: 0.16,
+  environmentDeformationStrength: 0.6,
   edgeFadeWidth: 0,
 
   // 8 rather than 5 because this is the *steady-state* target, and a blob
