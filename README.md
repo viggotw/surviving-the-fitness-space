@@ -2,6 +2,8 @@
 
 *Selection Without Searching*
 
+**[Play it in your browser](https://viggotw.github.io/surviving-the-fitness-space/)**
+
 A browser-based visualization of natural selection as a continuous, non-directed process.
 Organisms (simple spheres) grow, burst into mutated offspring near their parent, and disappear
 when the drifting "viable region" beneath them moves away. There's no goal, no optimizer, and no
@@ -126,6 +128,13 @@ single future "Effects" on/off checkbox, not a permanent set of controls:
 | Music volume | gain of the ambient pad |
 | Pop volume | gain of the (very quiet) organism-bursting sound effect |
 | Fall volume | gain of the (very quiet) organism-falling sound effect |
+
+## Deployment
+
+Pushing to `main` builds the site and publishes it to GitHub Pages via
+`.github/workflows/deploy.yml`. The type-check and the test suite have to pass first, so a broken
+commit can't replace a working site. The production build sets Vite's `base` to the repo name so
+assets resolve under the project subpath (`vite.config.ts`); `npm run dev` is unaffected.
 
 ## Project status
 

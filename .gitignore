@@ -25,3 +25,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Local-only drafts (not published to the public repo)
+submissions/
