@@ -19,7 +19,14 @@ export const MIN_BURST_RADIUS = 0.01;
 export const MIN_BIRTH_RADIUS = 0.001;
 
 export interface SimulationParameters {
-  /** organisms */
+  /**
+   * organisms; how many are seeded at startup, on a Reset, and on an
+   * auto-reseed after extinction. 0 (the default) means a run opens on an
+   * empty world — nothing alive, so `StatsHud`'s "click somewhere to add a
+   * ball" prompt fades in immediately and the first organism is one the
+   * viewer places themselves. The panel's manual "Seed population" button
+   * has its own count and is unaffected.
+   */
   initialOrganisms: number;
   /** organisms */
   maxOrganisms: number;
@@ -121,7 +128,7 @@ export interface SimulationParameters {
 }
 
 export const DEFAULT_PARAMETERS: SimulationParameters = {
-  initialOrganisms: 15,
+  initialOrganisms: 0,
   maxOrganisms: 200,
 
   growthRate: 0.025,
@@ -146,7 +153,10 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // Drift speed is independent of all that — it only moves shapes around, and
   // measurably doesn't affect how many exist or how big they are — so it's
   // free to be much larger than the other two without thinning the landscape.
-  environmentDriftSpeed: 5,
+  // It briefly defaulted to 5, which read as the landscape sliding around
+  // faster than anything could track; 2 keeps shapes visibly on the move
+  // while still letting a cluster sit inside one for a while.
+  environmentDriftSpeed: 2,
   environmentDeformationSpeed: 0.16,
   environmentDeformationStrength: 0.6,
   edgeFadeWidth: 0,

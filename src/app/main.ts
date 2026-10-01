@@ -19,6 +19,9 @@ const windowAspect = (): number => window.innerWidth / (window.innerHeight || 1)
 
 const simulation = new Simulation(DEFAULT_PARAMETERS);
 simulation.setBounds(computeWorldBounds(windowAspect()));
+// A no-op at the default initialOrganisms of 0: the run opens on an empty
+// world so the "click somewhere to add a ball" prompt is the first thing on
+// screen. Still driven by the parameter, so a preset can seed a crowd instead.
 simulation.seedPopulation(simulation.params.initialOrganisms);
 
 const renderer = new Renderer3D(canvas, simulation.params.maxOrganisms);

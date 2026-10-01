@@ -16,6 +16,15 @@ const SIZE_DISPLAY_SCALE = 100 / WORLD_SIZE;
 const toDisplaySize = (raw: number): number => raw * SIZE_DISPLAY_SCALE;
 const fromDisplaySize = (display: number): number => display / SIZE_DISPLAY_SCALE;
 
+/**
+ * Default count for the panel's manual "Seed population" button. Deliberately
+ * its own constant rather than `initialOrganisms`, which is now 0 so a run
+ * opens on an empty world — pressing this button is a dev action that wants a
+ * whole population at once, and a slider centered on zero organisms would be
+ * a degenerate range anyway.
+ */
+const MANUAL_SEED_COUNT = 15;
+
 /** A range with `min` fixed and `max` solved so `value` sits exactly at the midpoint — keeps the slider lever centered on the current default. */
 function centeredFromMin(value: number, min: number): { min: number; max: number } {
   return { min, max: 2 * value - min };
@@ -101,7 +110,7 @@ export class Controls {
       musicVolume: music.musicVolumeValue,
       popVolume: music.popVolumeValue,
       fallVolume: music.fallVolumeValue,
-      seedCount: p.initialOrganisms,
+      seedCount: MANUAL_SEED_COUNT,
       environmentDriftSpeed: p.environmentDriftSpeed,
       environmentDeformationSpeed: p.environmentDeformationSpeed,
       environmentDeformationStrength: p.environmentDeformationStrength,
@@ -201,9 +210,11 @@ export class Controls {
     };
 
     // Drift speed gets a hand-picked range rather than a centered one: 0.1 (a
-    // slow crawl, but never fully frozen) up to 10, which puts its default of 5
-    // within half a percent of the lever's center — near enough that solving for
-    // exact centering isn't worth giving up either round endpoint.
+    // slow crawl, but never fully frozen) up to 10. The range is kept as-is now
+    // that the default has come down to 2, so the lever sits low rather than
+    // centered — the headroom above is the whole point here, since "how fast
+    // should the landscape slide" is the environment knob most worth dragging
+    // well past its default to see what it does.
     bindMultiplier(
       "environmentDriftSpeed",
       "environmentDriftSpeedRaw",

@@ -202,7 +202,15 @@ export class Simulation {
 
     if (this.organisms.length === 0) {
       this.extinctionTimer += dt;
-      if (this.params.autoReseedOnExtinction && this.extinctionTimer >= this.params.extinctionReseedDelay) {
+      // Guarded on a non-zero seed count: with initialOrganisms at its default
+      // of 0 an auto-reseed would spawn nothing yet still zero the timer every
+      // extinctionReseedDelay seconds, which would stall both the HUD prompt
+      // and SpawnBudget's refill (they both read timeSinceExtinction) forever.
+      if (
+        this.params.autoReseedOnExtinction &&
+        this.params.initialOrganisms > 0 &&
+        this.extinctionTimer >= this.params.extinctionReseedDelay
+      ) {
         this.seedPopulation(this.params.initialOrganisms);
         this.extinctionTimer = 0;
       }

@@ -191,8 +191,11 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   `bindMultiplier`: a slider in Environment for everyday tuning, plus a field with no
   min/max in a collapsed "Beyond the sliders" folder for values the slider range deliberately can't
   reach. Deform speed/strength derive centered ranges from their defaults; drift speed instead has a
-  hand-picked `0.1`–`10` range (its default of 5 lands within half a percent of center anyway, and
-  keeping both round endpoints beat solving for exactness). Tweakpane clamps a bound value to its binding's own min/max, so one widget genuinely can't
+  hand-picked `0.1`–`10` range, deliberately left uncentered now that the default is 2 — the
+  headroom above is the point, since drift speed is the environment knob most worth dragging well
+  past its default. The panel's "Seed count" slider is likewise *not* bound to `initialOrganisms`
+  (its own `MANUAL_SEED_COUNT` instead): that parameter is 0 by default, and a slider centered on
+  zero organisms is a degenerate range. Tweakpane clamps a bound value to its binding's own min/max, so one widget genuinely can't
   do both, and one shared state field can't hold both a slider position and a value past that
   slider's end — hence the separate `…Raw` state keys, the slider pinning at its end while the raw
   field holds the real value, and the `syncing` guard (refreshing the slider makes it emit a change
@@ -281,7 +284,14 @@ The codebase enforces a strict one-way dependency: **simulation → rendering/UI
   `tryConsume()` is the only way to spend a spawn; it's a no-op returning `false` at zero, which is
   exactly what `main.ts`'s click handler checks to block spawning when the budget is empty.
 
-- `src/app/main.ts` — the only place the per-frame loop is wired:
+- `src/app/main.ts` — the only place the per-frame loop is wired. A run opens on an **empty world**:
+  `initialOrganisms` defaults to 0, so the startup `seedPopulation()` (and the Reset button's, and
+  `Presets.ts`'s) is a no-op, `timeSinceExtinction` starts counting from t=0, and `StatsHud`'s
+  "click somewhere to add a ball" prompt fades in within seconds as the first thing on screen —
+  the first organism is always one the viewer places. (`Simulation`'s auto-reseed is guarded on
+  `initialOrganisms > 0` for the same reason: reseeding nothing would still zero the extinction
+  timer every `extinctionReseedDelay`, stalling both the prompt and `SpawnBudget`'s refill.) The
+  loop itself:
   `simulation.update(dt) → spawnBudget.update(dt, ...) → music.updateEnvironment(...) →
   music.playPop()/playFall() (once per Simulation.burstsThisTick/fallsThisTick) →
   renderer.sync(simulation) → renderer.render() → controls.update() → statsHud.update(...)`, with
